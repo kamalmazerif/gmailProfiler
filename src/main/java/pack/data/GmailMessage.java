@@ -12,15 +12,22 @@ public class GmailMessage {
 
     public static final String FIELD_MESSAGE_ID = "messageId";
     public static final String FIELD_THREAD_ID = "threadId";
+    public static final String FIELD_HEADER_FROM = "headerFrom";
+
 
     @DatabaseField(generatedId = true)
     private int id;
 
+    // MessageId and ThreadId always provided in Summary view
     @DatabaseField(columnName = FIELD_MESSAGE_ID, canBeNull = false)
     private String messageId;
 
+    // MessageId and ThreadId always provided in Summary view
     @DatabaseField(columnName = FIELD_THREAD_ID, canBeNull = false)
     private String threadId;
+
+    @DatabaseField(columnName = FIELD_HEADER_FROM, canBeNull = true)
+    private String headerFrom;
 
 
     GmailMessage() {
@@ -34,7 +41,10 @@ public class GmailMessage {
 
     @Override
     public int hashCode() {
-        return (messageId + threadId).hashCode();
+        return ("" + messageId
+                + "-" + threadId
+                + "-" + headerFrom
+        ).hashCode();
     }
 
     @Override
@@ -43,7 +53,8 @@ public class GmailMessage {
             return false;
         }
         return messageId.equals(((GmailMessage) other).messageId)
-                && threadId.equals(((GmailMessage) other).threadId);
+                && threadId.equals(((GmailMessage) other).threadId)
+                && headerFrom.equals(((GmailMessage) other).headerFrom);
     }
 
     //////////////////////////////////////////////////
@@ -70,5 +81,13 @@ public class GmailMessage {
 
     public void setThreadId(String threadId) {
         this.threadId = threadId;
+    }
+
+    public String getHeaderFrom() {
+        return headerFrom;
+    }
+
+    public void setHeaderFrom(String headerFrom) {
+        this.headerFrom = headerFrom;
     }
 }

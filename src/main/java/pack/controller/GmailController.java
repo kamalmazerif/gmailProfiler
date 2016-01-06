@@ -1,6 +1,8 @@
 package pack.controller;
 
+import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.gmail.model.Message;
+import com.google.api.services.gmail.model.MessagePartHeader;
 import com.j256.ormlite.dao.Dao;
 import com.j256.ormlite.dao.DaoManager;
 import com.j256.ormlite.dao.GenericRawResults;
@@ -26,7 +28,7 @@ import java.util.List;
 public class GmailController {
 
     private final static String DATABASE_URL_MEMORY = "jdbc:h2:mem:account";  // Check if table name must be here
-    private final static String DATABASE_URL_DISK = "jdbc:h2:testdb";
+    private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
 
 
     private Dao<GmailMessage, String> messageDao;
@@ -40,8 +42,6 @@ public class GmailController {
 
         // create our data-source for the database
         connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
-        labelDao = DaoManager.createDao(connectionSource, GmailLabel.class);
-        messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
 
         //TableUtils.dropTable(connectionSource, GmailLabel.class, true);
         TableUtils.createTableIfNotExists(connectionSource, GmailLabel.class);
@@ -51,6 +51,14 @@ public class GmailController {
         // ... but not if we are updating i.e. most common senders
         //TableUtils.dropTable(connectionSource, GmailMessage.class, true);
         TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
+
+
+        labelDao = DaoManager.createDao(connectionSource, GmailLabel.class);
+        messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
+
+        // Usually should do a version check before upgrading database
+        //messageDao.executeRaw("ALTER TABLE `gmailMessages` ADD COLUMN headerFrom VARCHAR(255);");
+
 
         // ---------- Update Label info
         com.google.api.services.gmail.model.Label targetLabel = GmailQuickstart.getLabelInfo("INBOX");
@@ -104,15 +112,11 @@ public class GmailController {
             }
         }
 
+        JacksonFactory jsonFactory = new JacksonFactory();
+        final Message decodedJsonMessage = jsonFactory.fromString(latestMessage.toString(), Message.class);
+        System.out.println(decodedJsonMessage);
+        final List<MessagePartHeader> headers = decodedJsonMessage.getPayload().getHeaders();
 
-
-
-
-////        // Will not work, need to do a get on this message ID in order to get the last history ID.
-////        // Should probably do this after the rest of the operation is done
-////        BigInteger lastHistoryId = inboxMessages.get(0).getHistoryId();
-////        gmailLabel.setLastHistoryId(lastHistoryId);
-////        labelDao.update(gmailLabel);
 
         System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated);
         System.out.println("Messages total: " + messageDao.countOf());
