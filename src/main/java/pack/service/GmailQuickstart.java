@@ -147,8 +147,8 @@ public class GmailQuickstart {
         Gmail service = getGmailService();
 
         final Message message = service.users().messages().get("me", messageId).execute();
-        System.out.println("Got message:" );
-        System.out.println(message);
+        final String snippet = message.getSnippet();
+        System.out.println("Got details for messageId:" + messageId + " snippet: " + snippet);
         return message;
     }
 

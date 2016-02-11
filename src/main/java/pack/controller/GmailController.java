@@ -16,10 +16,15 @@ import pack.data.GmailLabel;
 import pack.data.GmailMessage;
 import pack.service.GmailQuickstart;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * Created by User on 1/3/2016.
@@ -31,33 +36,40 @@ public class GmailController {
     private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
 
 
+    // Second generic parameter appears to be wrong, should match the type of ID field
     private Dao<GmailMessage, String> messageDao;
     private Dao<GmailLabel, String> labelDao;
+
+    @PostConstruct
+    private void databaseInit() throws SQLException { // Throwing on @PostConstruct method will cause application to exit
+
+        try {
+            ConnectionSource connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
+            //TableUtils.dropTable(connectionSource, GmailLabel.class, true);
+            TableUtils.createTableIfNotExists(connectionSource, GmailLabel.class);
+
+
+            // Probably *should* drop the GmailMessage table if we are re-syncing from start?
+            // ... but not if we are updating i.e. most common senders
+            //TableUtils.dropTable(connectionSource, GmailMessage.class, true);
+            TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
+
+
+            labelDao = DaoManager.createDao(connectionSource, GmailLabel.class);
+            messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
+
+            // Usually should do a version check before upgrading database
+            //messageDao.executeRaw("ALTER TABLE `gmailMessages` ADD COLUMN headerFrom VARCHAR(255);");
+        } catch (SQLException e) {
+            System.out.println("Problem initializing database");
+            throw e;
+        }
+    }
 
 
     public void resyncInbox() throws Exception {
         long updateTime = System.currentTimeMillis();
-        ConnectionSource connectionSource = null;
 
-
-        // create our data-source for the database
-        connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
-
-        //TableUtils.dropTable(connectionSource, GmailLabel.class, true);
-        TableUtils.createTableIfNotExists(connectionSource, GmailLabel.class);
-
-
-        // Probably *should* drop the GmailMessage table if we are re-syncing from start?
-        // ... but not if we are updating i.e. most common senders
-        //TableUtils.dropTable(connectionSource, GmailMessage.class, true);
-        TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
-
-
-        labelDao = DaoManager.createDao(connectionSource, GmailLabel.class);
-        messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
-
-        // Usually should do a version check before upgrading database
-        //messageDao.executeRaw("ALTER TABLE `gmailMessages` ADD COLUMN headerFrom VARCHAR(255);");
 
 
         // ---------- Update Label info
@@ -92,12 +104,12 @@ public class GmailController {
         int messagesAdded = 0;
         int messagesUpdated = 0;
         for (com.google.api.services.gmail.model.Message nextMessage : inboxMessages) {
-
             final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper(), nextMessage.getId());
             final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
             int numberOfMatches = matchingMessagesResults.size();
             if (numberOfMatches > 1) {
                 throw new Exception ("Unexpected number of matches on existing message ID " + nextMessage.getId());
+
             } else if (numberOfMatches == 1) {
                 final GmailMessage firstResult = matchingMessagesResults.get(0);
                 firstResult.setThreadId(nextMessage.getThreadId());
@@ -108,17 +120,70 @@ public class GmailController {
                 GmailMessage gmailMessageToPersist = new GmailMessage(nextMessage.getId(), nextMessage.getThreadId());
                 messageDao.create(gmailMessageToPersist);
                 messagesAdded++;
-
             }
         }
 
-        JacksonFactory jsonFactory = new JacksonFactory();
-        final Message decodedJsonMessage = jsonFactory.fromString(latestMessage.toString(), Message.class);
-        System.out.println(decodedJsonMessage);
-        final List<MessagePartHeader> headers = decodedJsonMessage.getPayload().getHeaders();
-
-
         System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated);
         System.out.println("Messages total: " + messageDao.countOf());
+
+        updateMessageDetails();
+        sortMessageDetails();
+    }
+
+    private void sortMessageDetails() throws SQLException {
+        final List<GmailMessage> gmailMessages = messageDao.queryForAll();
+        HashMap<String, Integer> senderCountMap = new HashMap<>();
+
+        for (GmailMessage message : gmailMessages) {
+            final String key = message.getHeaderFrom();
+            if (!senderCountMap.containsKey(key)) {
+                senderCountMap.put(key, 1);
+            } else {
+                final Integer oldCount = senderCountMap.get(key);
+                senderCountMap.put(key, oldCount+1);
+            }
+        }
+
+        Stream<Map.Entry<String,Integer>> sorted = senderCountMap.entrySet().stream()
+                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()));
+        final Object[] objects = sorted.toArray();
+        for (Object nextObject : objects) {
+            System.out.println(nextObject);
+        }
+    }
+
+    private void updateMessageDetails() throws SQLException, IOException {
+        QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
+        qb.where().isNull(GmailMessage.FIELD_HEADER_FROM);
+
+        final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper());
+        final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
+
+        System.out.println("Found " + matchingMessagesResults.size() + " messages without From header data");
+
+        int messagesUpdated = 0;
+        for (GmailMessage nextMessage : matchingMessagesResults) {
+            final String nextMessageId = nextMessage.getMessageId();
+            final Message latestMessage = GmailQuickstart.getMessageInfo(nextMessageId);
+
+            String fromHeaderValue = null;
+            final List<MessagePartHeader> messageHeaders = latestMessage.getPayload().getHeaders();
+            for (MessagePartHeader header : messageHeaders) {
+                if (header.getName().equals("From")) {
+                    fromHeaderValue = header.getValue();
+                }
+            }
+
+            if (fromHeaderValue == null) {
+                System.out.println("Could not find 'From' header for messageId: " + nextMessageId);
+            } else {
+                nextMessage.setHeaderFrom(fromHeaderValue);
+                messageDao.update(nextMessage);
+            }
+
+            messagesUpdated++;
+        }
+
+        System.out.println("Message Details were updated for " + messagesUpdated + " messages");
     }
 }
