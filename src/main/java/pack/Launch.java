@@ -3,9 +3,11 @@ package pack;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import pack.controller.GmailController;
+import pack.data.GmailLabelUpdate;
 import pack.service.GmailQuickstart;
 
 import javax.annotation.PostConstruct;
+import java.util.List;
 
 /**
  * Created by User on 12/27/2015.
@@ -37,9 +39,19 @@ public class Launch {
 
         // 4706615
         // 4706653
-        //GmailQuickstart.showMessageHistory("4706615");
 
-        gmailController.resyncInbox();
+        // 4755298
+        // 4755302
+        GmailQuickstart.showMessageHistory("4755298");
+
+        //gmailController.resyncInbox(); // Update inbox
+
+//        List<GmailLabelUpdate> labelInfo = gmailController.getLabelInfo();
+//        for (GmailLabelUpdate label : labelInfo) {
+//            label.getLastHistoryId();
+//        }
+//        System.out.println(labelInfo);
+
     }
 
 }

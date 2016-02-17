@@ -1,6 +1,5 @@
 package pack.controller;
 
-import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.gmail.model.Message;
 import com.google.api.services.gmail.model.MessagePartHeader;
 import com.j256.ormlite.dao.Dao;
@@ -12,13 +11,12 @@ import com.j256.ormlite.stmt.SelectArg;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
 import org.springframework.stereotype.Component;
-import pack.data.GmailLabel;
+import pack.data.GmailLabelUpdate;
 import pack.data.GmailMessage;
 import pack.service.GmailQuickstart;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,15 +36,15 @@ public class GmailController {
 
     // Second generic parameter appears to be wrong, should match the type of ID field
     private Dao<GmailMessage, String> messageDao;
-    private Dao<GmailLabel, String> labelDao;
+    private Dao<GmailLabelUpdate, String> labelDao;
 
     @PostConstruct
     private void databaseInit() throws SQLException { // Throwing on @PostConstruct method will cause application to exit
 
         try {
             ConnectionSource connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
-            //TableUtils.dropTable(connectionSource, GmailLabel.class, true);
-            TableUtils.createTableIfNotExists(connectionSource, GmailLabel.class);
+            //TableUtils.dropTable(connectionSource, GmailLabelUpdate.class, true);
+            TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
 
 
             // Probably *should* drop the GmailMessage table if we are re-syncing from start?
@@ -55,7 +53,7 @@ public class GmailController {
             TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
 
 
-            labelDao = DaoManager.createDao(connectionSource, GmailLabel.class);
+            labelDao = DaoManager.createDao(connectionSource, GmailLabelUpdate.class);
             messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
 
             // Usually should do a version check before upgrading database
@@ -66,22 +64,24 @@ public class GmailController {
         }
     }
 
+    public List<GmailLabelUpdate> getLabelInfo() throws SQLException {
+        List<GmailLabelUpdate> gmailLabelUpdates = labelDao.queryForAll();
+        return gmailLabelUpdates;
+    }
 
     public void resyncInbox() throws Exception {
         long updateTime = System.currentTimeMillis();
 
-
-
         // ---------- Update Label info
         com.google.api.services.gmail.model.Label targetLabel = GmailQuickstart.getLabelInfo("INBOX");
-        GmailLabel gmailLabel = new GmailLabel();
-        gmailLabel.setLabelName(targetLabel.getName());
-        gmailLabel.setMessagesTotal(targetLabel.getMessagesTotal());
-        gmailLabel.setMessagesUnread(targetLabel.getMessagesUnread());
-        gmailLabel.setThreadsTotal(targetLabel.getThreadsTotal());
-        gmailLabel.setThreadsUnread(targetLabel.getThreadsUnread());
-        gmailLabel.setUpdateTimeMillis(updateTime);
-        labelDao.create(gmailLabel);
+        GmailLabelUpdate gmailLabelUpdate = new GmailLabelUpdate();
+        gmailLabelUpdate.setLabelName(targetLabel.getName());
+        gmailLabelUpdate.setMessagesTotal(targetLabel.getMessagesTotal());
+        gmailLabelUpdate.setMessagesUnread(targetLabel.getMessagesUnread());
+        gmailLabelUpdate.setThreadsTotal(targetLabel.getThreadsTotal());
+        gmailLabelUpdate.setThreadsUnread(targetLabel.getThreadsUnread());
+        gmailLabelUpdate.setUpdateTimeMillis(updateTime);
+        labelDao.create(gmailLabelUpdate);
 
 
         // ---------- Get all messages
@@ -91,8 +91,8 @@ public class GmailController {
         final String latestMessageId = inboxMessages.get(0).getId();
         final Message latestMessage = GmailQuickstart.getMessageInfo(latestMessageId);
         final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
-        gmailLabel.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
-        labelDao.update(gmailLabel);
+        gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
+        labelDao.update(gmailLabelUpdate);
         System.out.println("Updated label info with last history Id: " + historyIdBigIntegerToString);
 
 

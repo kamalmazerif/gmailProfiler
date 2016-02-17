@@ -152,6 +152,12 @@ public class GmailQuickstart {
         return message;
     }
 
+    public static void getHistory(String historyId) throws IOException {
+        Gmail service = getGmailService();
+        ListHistoryResponse response = service.users().history().list("me").setStartHistoryId(new BigInteger(historyId)).execute();
+        System.out.println(response);
+    }
+
     public static Label getLabelInfo(String labelId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
@@ -264,14 +270,78 @@ public class GmailQuickstart {
         while (response.getHistory() != null) {
             histories.addAll(response.getHistory());
             if (response.getNextPageToken() != null) {
-                System.out.println("Getting next page token...");
                 String pageToken = response.getNextPageToken();
+                System.out.println("Getting next page, token: " + pageToken);
                 response = service.users().history().list("me").setPageToken(pageToken)
                         .setStartHistoryId(startHistoryIdBigInteger).execute();
             } else {
+                System.out.println("Response has no next page");
                 break;
             }
         }
+
+        System.out.println("Done collecting histories");
+
+        for (History history : histories) {
+            List<HistoryLabelAdded> labelsAdded = history.getLabelsAdded();
+            List<HistoryLabelRemoved> labelsRemoved = history.getLabelsRemoved();
+            List<HistoryMessageAdded> messagesAdded = history.getMessagesAdded();
+            List<HistoryMessageDeleted> messagesDeleted = history.getMessagesDeleted();
+            List<Message> messages = history.getMessages(); // Not clear this will be used for anything, per docs
+            BigInteger historyId = history.getId();
+
+            System.out.println("Checking historyId: " + historyId);
+
+            if (labelsAdded != null && labelsAdded.size() > 0) {
+                System.out.println("Labels Added: " + labelsAdded.size());
+            }
+
+            if (labelsRemoved != null && labelsRemoved.size() > 0) {
+                System.out.println("Labels Removed: " + labelsRemoved.size());
+                for (HistoryLabelRemoved labelRemoved : labelsRemoved) {
+                    List<String> labelIds = labelRemoved.getLabelIds();
+                    Message message = labelRemoved.getMessage();
+                    if (labelIds.contains("UNREAD")) {
+                        System.out.println("Message was read");
+                    }
+
+                    labelIds.remove("UNREAD");
+                    if (labelIds.size() > 0) {
+                        System.out.println("Unknown label(s) removed from message: " + labelIds);
+                    }
+                }
+            }
+
+            if (messagesAdded != null && messagesAdded.size() > 0) {
+                System.out.println("Messages Added: " + messagesAdded.size());
+                for (HistoryMessageAdded messageAdded : messagesAdded) {
+                    List<String> labelIds = messageAdded.getMessage().getLabelIds();
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message added to inbox");
+                    }
+
+                    labelIds.remove("INBOX");
+                    if (labelIds.size() > 0){
+                        System.out.println("Message added with unknown labelIds: " + labelIds);
+                    }
+                }
+            }
+
+            if (messagesDeleted != null && messagesDeleted.size() > 0) {
+                System.out.println("Messages Deleted: " + messagesDeleted.size());
+                // Unless it was directly deleted from inbox, not sure if we care
+            }
+
+
+        }
+
+        // messagesAdded
+        // messages added to Inbox (check label: INBOX)
+
+        // labelsRemoved
+        // messages read (check label removed: UNREAD)
+
+        // messagesDeleted
 
         for (History history : histories) {
             System.out.println(" --- Next history: ");
