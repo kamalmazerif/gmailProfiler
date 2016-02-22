@@ -301,10 +301,16 @@ public class GmailQuickstart {
                 for (HistoryLabelRemoved labelRemoved : labelsRemoved) {
                     List<String> labelIds = labelRemoved.getLabelIds();
                     Message message = labelRemoved.getMessage();
+
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message was removed from inbox");
+                    }
+
                     if (labelIds.contains("UNREAD")) {
                         System.out.println("Message was read");
                     }
 
+                    labelIds.remove("INBOX");
                     labelIds.remove("UNREAD");
                     if (labelIds.size() > 0) {
                         System.out.println("Unknown label(s) removed from message: " + labelIds);
@@ -314,22 +320,63 @@ public class GmailQuickstart {
 
             if (messagesAdded != null && messagesAdded.size() > 0) {
                 System.out.println("Messages Added: " + messagesAdded.size());
+
+
                 for (HistoryMessageAdded messageAdded : messagesAdded) {
                     List<String> labelIds = messageAdded.getMessage().getLabelIds();
+
                     if (labelIds.contains("INBOX")) {
                         System.out.println("Message added to inbox");
                     }
 
-                    labelIds.remove("INBOX");
-                    if (labelIds.size() > 0){
+                    if (labelIds.contains("UNREAD")) {
+                        System.out.println("Message newly unread (might be newly received)");
+                    }
+
+                    // Do we care about any of these?
+                    for (String remainingLabel : labelIds) {
+                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
+                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
+                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
+                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
+                                || remainingLabel.startsWith("Label_")
+                                ) {
+                            continue;
+                        }
+
                         System.out.println("Message added with unknown labelIds: " + labelIds);
+                        break;
                     }
                 }
             }
 
             if (messagesDeleted != null && messagesDeleted.size() > 0) {
-                System.out.println("Messages Deleted: " + messagesDeleted.size());
+                System.out.println("Messages Deleted: (" + messagesDeleted.size() + ")");
                 // Unless it was directly deleted from inbox, not sure if we care
+
+                for (HistoryMessageDeleted messageDeleted : messagesDeleted) {
+                    List<String> labelIds = messageDeleted.getMessage().getLabelIds();
+
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message deleted from INBOX");
+                    }
+
+
+                    for (String remainingLabel : labelIds) {
+                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
+                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
+                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
+                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
+                                || remainingLabel.startsWith("Label_")
+                                ) {
+                            continue;
+                        }
+
+                        System.out.println("Message deleted with unknown labelIds: " + labelIds);
+                        break;
+                    }
+
+                }
             }
 
 
