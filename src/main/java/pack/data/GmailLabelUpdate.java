@@ -59,7 +59,7 @@ public class GmailLabelUpdate {
 
     @Override
     public boolean equals(Object other) {
-        if (other == null || other.getClass().equals(getClass())) {
+        if (other == null || !other.getClass().equals(getClass())) {
             return false;
         }
 

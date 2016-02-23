@@ -14,6 +14,8 @@ import javax.annotation.PostConstruct;
 @Component
 public class Launch {
 
+    public static final String SCHEMA_APP_NAME = "GMAIL_MAILBOX_STATS";
+
     @Autowired
     private GmailController gmailController;
 

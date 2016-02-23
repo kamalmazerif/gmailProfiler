@@ -11,8 +11,10 @@ import com.j256.ormlite.stmt.SelectArg;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
 import org.springframework.stereotype.Component;
+import pack.Launch;
 import pack.data.GmailLabelUpdate;
 import pack.data.GmailMessage;
+import pack.data.Schema;
 import pack.service.GmailApiService;
 
 import javax.annotation.PostConstruct;
@@ -37,27 +39,63 @@ public class GmailController {
     // Second generic parameter appears to be wrong, should match the type of ID field
     private Dao<GmailMessage, String> messageDao;
     private Dao<GmailLabelUpdate, String> labelDao;
+    private Dao<Schema, String> schemaDao;
 
     @PostConstruct
-    private void databaseInit() throws SQLException { // Throwing on @PostConstruct method will cause application to exit
+    private void databaseInit() throws Exception { // Throwing on @PostConstruct method will cause application to exit
+        final String appName = Launch.SCHEMA_APP_NAME;
 
         try {
             ConnectionSource connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
+
+            TableUtils.createTableIfNotExists(connectionSource, Schema.class);
+
             //TableUtils.dropTable(connectionSource, GmailLabelUpdate.class, true);
-            TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
-
-
-            // Probably *should* drop the GmailMessage table if we are re-syncing from start?
-            // ... but not if we are updating i.e. most common senders
             //TableUtils.dropTable(connectionSource, GmailMessage.class, true);
-            TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
 
 
+            schemaDao = DaoManager.createDao(connectionSource, Schema.class);
             labelDao = DaoManager.createDao(connectionSource, GmailLabelUpdate.class);
             messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
 
-            // Usually should do a version check before upgrading database
-            //messageDao.executeRaw("ALTER TABLE `gmailMessages` ADD COLUMN headerFrom VARCHAR(255);");
+
+            HashMap<String, Object> queryMap = new HashMap<>();
+            queryMap.put(Schema.FIELD_SCHEMA_NAME, appName);
+            final List<Schema> schemas = schemaDao.queryForFieldValues(queryMap);
+
+
+            Schema schemaObject;
+            if (schemas.size() == 0) {
+                TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
+                TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
+                Schema newSchema = new Schema(appName);
+                newSchema.setSchemaVersion(1L);
+                schemaObject = newSchema;
+                schemaDao.create(newSchema);
+
+            } else if (schemas.size() == 1) {
+                schemaObject = schemas.get(0);
+
+            } else {
+                throw new Exception("Unexpected number of matching schema versions: " + schemas.size());
+            }
+
+            System.out.println("Schema version for " + appName + " : " + schemaObject.getSchemaVersion());
+
+            if (schemaObject.getSchemaVersion() == 1) {
+                // Usually should do a version check before upgrading database
+                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN internalDate BIGINT;");
+                schemaObject.setSchemaVersion(2L);
+                schemaDao.update(schemaObject);
+                System.out.println("Upgraded schema for " + appName + " to verison " + schemaObject.getSchemaVersion());
+
+            } else if (schemaObject.getSchemaVersion() == 2) {
+                // Expected Schema version
+                // Upgrade code would go here
+            } else {
+                throw new Exception("Unknown schema version: " + schemaObject.getSchemaVersion());
+            }
+
         } catch (SQLException e) {
             System.out.println("Problem initializing database");
             throw e;
@@ -125,15 +163,19 @@ public class GmailController {
                     final Long oldInternalDate = firstResult.getInternalDate();
 
 
-
-                    if ( (oldThreadId == null && newThreadId != null) || !oldThreadId.equals(newThreadId)) {
+                    if (
+                            (oldThreadId != null || newThreadId != null)
+                                    && !oldThreadId.equals(newThreadId)
+                            ) {
                         System.out.println("ThreadId has changed for message: " + firstResult.getId() + " old value: ");
                         firstResult.setThreadId(newThreadId);
                         updated = true;
                     }
 
-
-                    if ( (oldInternalDate == null && newInternalDate != null) || !oldInternalDate.equals(newInternalDate)) {
+                    if (
+                            (oldInternalDate != null || newInternalDate != null)
+                                    && !oldInternalDate.equals(newInternalDate)
+                            ) {
                         System.out.println("InternalDate has changed for message: " + firstResult.getId());
                         firstResult.setInternalDate(newInternalDate);
                         updated = true;

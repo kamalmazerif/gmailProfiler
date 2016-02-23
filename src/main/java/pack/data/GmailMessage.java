@@ -7,7 +7,7 @@ import com.j256.ormlite.table.DatabaseTable;
  * Created by User on 1/3/2016.
  */
 
-@DatabaseTable(tableName = "gmailMessages")
+@DatabaseTable(tableName = Schema.TABLE_NAME_GMAIL_MESSAGES)
 public class GmailMessage {
 
     public static final String FIELD_MESSAGE_ID = "messageId";
@@ -53,7 +53,7 @@ public class GmailMessage {
 
     @Override
     public boolean equals(Object other) {
-        if (other == null || other.getClass().equals(getClass())) {
+        if (other == null || !other.getClass().equals(getClass())) {
             return false;
         }
         return messageId.equals(((GmailMessage) other).messageId)
