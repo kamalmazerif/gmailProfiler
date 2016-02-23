@@ -18,7 +18,6 @@ import com.google.api.services.gmail.Gmail;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.Thread;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,7 +27,7 @@ import java.util.List;
 /**
  * Created by User on 12/27/2015.
  */
-public class GmailQuickstart {
+public class GmailApiService {
 
     final static String projectId = "gmail-test-2015-12";
 
@@ -75,7 +74,7 @@ public class GmailQuickstart {
         public static Credential authorize() throws IOException {
             // Load client secrets.
             InputStream in =
-                    GmailQuickstart.class.getResourceAsStream("/client_secret.json");
+                    GmailApiService.class.getResourceAsStream("/client_secret.json");
             GoogleClientSecrets clientSecrets =
                     GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
 

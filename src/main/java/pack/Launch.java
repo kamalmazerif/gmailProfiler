@@ -3,11 +3,9 @@ package pack;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import pack.controller.GmailController;
-import pack.data.GmailLabelUpdate;
-import pack.service.GmailQuickstart;
+import pack.service.GmailApiService;
 
 import javax.annotation.PostConstruct;
-import java.util.List;
 
 /**
  * Created by User on 12/27/2015.
@@ -24,17 +22,19 @@ public class Launch {
         // Confirmed this gets run
 
 
-        //GmailQuickstart.listLabels();
-        //GmailQuickstart.setWatch();
+        //GmailApiService.listLabels();
+        //GmailApiService.setWatch();
 
 
         //PubSubClient.createTopic(); // Already done
         //PubSubClient.createSubscription();
         //PubSubClient.setTopicPolicy();
 
-        //GmailQuickstart.getMessageInfo("7209405991688");
-        //GmailQuickstart.getLabelInfo("INBOX");
-        //GmailQuickstart.scanAllMessagesWithLabel("INBOX");
+        gmailController.resyncInbox(); // Update inbox
+
+        //GmailApiService.getMessageInfo("7209405991688");
+        //GmailApiService.getLabelInfo("INBOX");
+        //GmailApiService.scanAllMessagesWithLabel("INBOX");
         //PubSubClient.doPull();
 
         // 4706615
@@ -42,9 +42,9 @@ public class Launch {
 
         // 4755298
         // 4755302
-        GmailQuickstart.showMessageHistory("4755298");
+        GmailApiService.showMessageHistory("4755298");
 
-        //gmailController.resyncInbox(); // Update inbox
+
 
 //        List<GmailLabelUpdate> labelInfo = gmailController.getLabelInfo();
 //        for (GmailLabelUpdate label : labelInfo) {

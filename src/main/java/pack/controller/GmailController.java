@@ -13,7 +13,7 @@ import com.j256.ormlite.table.TableUtils;
 import org.springframework.stereotype.Component;
 import pack.data.GmailLabelUpdate;
 import pack.data.GmailMessage;
-import pack.service.GmailQuickstart;
+import pack.service.GmailApiService;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -73,7 +73,7 @@ public class GmailController {
         long updateTime = System.currentTimeMillis();
 
         // ---------- Update Label info
-        com.google.api.services.gmail.model.Label targetLabel = GmailQuickstart.getLabelInfo("INBOX");
+        com.google.api.services.gmail.model.Label targetLabel = GmailApiService.getLabelInfo("INBOX");
         GmailLabelUpdate gmailLabelUpdate = new GmailLabelUpdate();
         gmailLabelUpdate.setLabelName(targetLabel.getName());
         gmailLabelUpdate.setMessagesTotal(targetLabel.getMessagesTotal());
@@ -85,11 +85,11 @@ public class GmailController {
 
 
         // ---------- Get all messages
-        List<com.google.api.services.gmail.model.Message> inboxMessages = GmailQuickstart.scanAllMessagesWithLabel("INBOX");
+        List<com.google.api.services.gmail.model.Message> inboxMessages = GmailApiService.scanAllMessagesWithLabel("INBOX");
 
         // ---------- Record historyId of latest message with label info for use in future updates
         final String latestMessageId = inboxMessages.get(0).getId();
-        final Message latestMessage = GmailQuickstart.getMessageInfo(latestMessageId);
+        final Message latestMessage = GmailApiService.getMessageInfo(latestMessageId);
         final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
         gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
         labelDao.update(gmailLabelUpdate);
@@ -103,31 +103,68 @@ public class GmailController {
 
         int messagesAdded = 0;
         int messagesUpdated = 0;
+        int messagesUnchanged = 0;
         for (com.google.api.services.gmail.model.Message nextMessage : inboxMessages) {
             final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper(), nextMessage.getId());
             final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
             int numberOfMatches = matchingMessagesResults.size();
+
+            final String newThreadId = nextMessage.getThreadId();
+
             if (numberOfMatches > 1) {
                 throw new Exception ("Unexpected number of matches on existing message ID " + nextMessage.getId());
 
-            } else if (numberOfMatches == 1) {
-                final GmailMessage firstResult = matchingMessagesResults.get(0);
-                firstResult.setThreadId(nextMessage.getThreadId());
-                messageDao.update(firstResult);
-                messagesUpdated++;
 
             } else {
-                GmailMessage gmailMessageToPersist = new GmailMessage(nextMessage.getId(), nextMessage.getThreadId());
-                messageDao.create(gmailMessageToPersist);
-                messagesAdded++;
+                final Long newInternalDate = nextMessage.getInternalDate();
+
+                if (numberOfMatches == 1) {
+                    boolean updated = false;
+                    final GmailMessage firstResult = matchingMessagesResults.get(0);
+                    final String oldThreadId = firstResult.getThreadId();
+                    final Long oldInternalDate = firstResult.getInternalDate();
+
+
+
+                    if ( (oldThreadId == null && newThreadId != null) || !oldThreadId.equals(newThreadId)) {
+                        System.out.println("ThreadId has changed for message: " + firstResult.getId() + " old value: ");
+                        firstResult.setThreadId(newThreadId);
+                        updated = true;
+                    }
+
+
+                    if ( (oldInternalDate == null && newInternalDate != null) || !oldInternalDate.equals(newInternalDate)) {
+                        System.out.println("InternalDate has changed for message: " + firstResult.getId());
+                        firstResult.setInternalDate(newInternalDate);
+                        updated = true;
+                    }
+
+                    if (updated) {
+                        messageDao.update(firstResult);
+                        messagesUpdated++;
+                    } else {
+                        messagesUnchanged++;
+                    }
+
+
+                } else {
+                    GmailMessage gmailMessageToPersist = new GmailMessage(nextMessage.getId(), newThreadId);
+                    gmailMessageToPersist.setInternalDate(newInternalDate);
+                    messageDao.create(gmailMessageToPersist);
+                    messagesAdded++;
+                }
             }
         }
 
-        System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated);
+        System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated +" messages, " + messagesUnchanged + " messages unchanged");
         System.out.println("Messages total: " + messageDao.countOf());
 
         updateMessageDetails();
         sortMessageDetails();
+    }
+
+    private void getMessageById(String messageId) throws SQLException {
+        GmailMessage gmailMessage = messageDao.queryForId(messageId);
     }
 
     private void sortMessageDetails() throws SQLException {
@@ -164,7 +201,7 @@ public class GmailController {
         int messagesUpdated = 0;
         for (GmailMessage nextMessage : matchingMessagesResults) {
             final String nextMessageId = nextMessage.getMessageId();
-            final Message latestMessage = GmailQuickstart.getMessageInfo(nextMessageId);
+            final Message latestMessage = GmailApiService.getMessageInfo(nextMessageId);
 
             String fromHeaderValue = null;
             final List<MessagePartHeader> messageHeaders = latestMessage.getPayload().getHeaders();

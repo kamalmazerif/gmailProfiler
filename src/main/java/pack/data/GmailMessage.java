@@ -13,6 +13,7 @@ public class GmailMessage {
     public static final String FIELD_MESSAGE_ID = "messageId";
     public static final String FIELD_THREAD_ID = "threadId";
     public static final String FIELD_HEADER_FROM = "headerFrom";
+    public static final String FIELD_INTERNAL_DATE = "internalDate";
 
 
     @DatabaseField(generatedId = true)
@@ -29,6 +30,8 @@ public class GmailMessage {
     @DatabaseField(columnName = FIELD_HEADER_FROM, canBeNull = true)
     private String headerFrom;
 
+    @DatabaseField(columnName = FIELD_INTERNAL_DATE, canBeNull = true)
+    private Long internalDate;
 
     GmailMessage() {
         // all persisted classes must define a no-arg constructor with at least package visibility
@@ -44,6 +47,7 @@ public class GmailMessage {
         return ("" + messageId
                 + "-" + threadId
                 + "-" + headerFrom
+                + "-" + internalDate
         ).hashCode();
     }
 
@@ -54,7 +58,8 @@ public class GmailMessage {
         }
         return messageId.equals(((GmailMessage) other).messageId)
                 && threadId.equals(((GmailMessage) other).threadId)
-                && headerFrom.equals(((GmailMessage) other).headerFrom);
+                && headerFrom.equals(((GmailMessage) other).headerFrom)
+                && internalDate.equals(((GmailMessage) other).internalDate);
     }
 
     //////////////////////////////////////////////////
@@ -89,5 +94,13 @@ public class GmailMessage {
 
     public void setHeaderFrom(String headerFrom) {
         this.headerFrom = headerFrom;
+    }
+
+    public void setInternalDate(Long internalDate) {
+        this.internalDate = internalDate;
+    }
+
+    public Long getInternalDate() {
+        return internalDate;
     }
 }
