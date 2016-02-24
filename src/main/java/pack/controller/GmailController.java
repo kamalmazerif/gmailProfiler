@@ -1,5 +1,10 @@
 package pack.controller;
 
+import com.google.api.services.gmail.model.History;
+import com.google.api.services.gmail.model.HistoryLabelAdded;
+import com.google.api.services.gmail.model.HistoryLabelRemoved;
+import com.google.api.services.gmail.model.HistoryMessageAdded;
+import com.google.api.services.gmail.model.HistoryMessageDeleted;
 import com.google.api.services.gmail.model.Message;
 import com.google.api.services.gmail.model.MessagePartHeader;
 import com.j256.ormlite.dao.Dao;
@@ -19,8 +24,10 @@ import pack.service.GmailApiService;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,7 +134,7 @@ public class GmailController {
 
         // ---------- Record historyId of latest message with label info for use in future updates
         final String latestMessageId = inboxMessages.get(0).getId();
-        final Message latestMessage = GmailApiService.getMessageInfo(latestMessageId);
+        final Message latestMessage = GmailApiService.getMessageInfoFromApi(latestMessageId);
         final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
         gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
         labelDao.update(gmailLabelUpdate);
@@ -142,6 +149,7 @@ public class GmailController {
         int messagesAdded = 0;
         int messagesUpdated = 0;
         int messagesUnchanged = 0;
+
         for (com.google.api.services.gmail.model.Message nextMessage : inboxMessages) {
             final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper(), nextMessage.getId());
             final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
@@ -151,7 +159,6 @@ public class GmailController {
 
             if (numberOfMatches > 1) {
                 throw new Exception ("Unexpected number of matches on existing message ID " + nextMessage.getId());
-
 
             } else {
                 final Long newInternalDate = nextMessage.getInternalDate();
@@ -171,7 +178,7 @@ public class GmailController {
                         firstResult.setThreadId(newThreadId);
                         updated = true;
                     }
-
+                    // this is the wrong place to do this, internaldate is null in these API results
                     if (
                             (oldInternalDate != null || newInternalDate != null)
                                     && !oldInternalDate.equals(newInternalDate)
@@ -188,7 +195,6 @@ public class GmailController {
                         messagesUnchanged++;
                     }
 
-
                 } else {
                     GmailMessage gmailMessageToPersist = new GmailMessage(nextMessage.getId(), newThreadId);
                     gmailMessageToPersist.setInternalDate(newInternalDate);
@@ -201,12 +207,25 @@ public class GmailController {
         System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated +" messages, " + messagesUnchanged + " messages unchanged");
         System.out.println("Messages total: " + messageDao.countOf());
 
-        updateMessageDetails();
-        sortMessageDetails();
+        updateMessageDetails(); // Collects axtra info on messages using api
+        sortMessageDetails(); // Prepares and displays statistics
     }
 
-    private void getMessageById(String messageId) throws SQLException {
-        GmailMessage gmailMessage = messageDao.queryForId(messageId);
+    private GmailMessage getMessageById(String messageId) throws Exception {
+        GmailMessage gmailMessage = null;
+
+        HashMap<String, Object> queryMap = new HashMap<>();
+        queryMap.put(GmailMessage.FIELD_MESSAGE_ID, messageId);
+        final List<GmailMessage> messages = messageDao.queryForFieldValues(queryMap);
+
+        GmailMessage returnMessage = null;
+        if (messages.size() > 1) {
+            throw new Exception("Expected only one message in database with messageId: " + messageId);
+        } else if (messages.size() == 1) {
+            returnMessage = messages.get(0);
+        }
+
+        return returnMessage;
     }
 
     private void sortMessageDetails() throws SQLException {
@@ -231,6 +250,7 @@ public class GmailController {
         }
     }
 
+    // Gets extra information from message Id (i.e. header information)
     private void updateMessageDetails() throws SQLException, IOException {
         QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
         qb.where().isNull(GmailMessage.FIELD_HEADER_FROM);
@@ -243,7 +263,7 @@ public class GmailController {
         int messagesUpdated = 0;
         for (GmailMessage nextMessage : matchingMessagesResults) {
             final String nextMessageId = nextMessage.getMessageId();
-            final Message latestMessage = GmailApiService.getMessageInfo(nextMessageId);
+            final Message latestMessage = GmailApiService.getMessageInfoFromApi(nextMessageId);
 
             String fromHeaderValue = null;
             final List<MessagePartHeader> messageHeaders = latestMessage.getPayload().getHeaders();
@@ -264,5 +284,134 @@ public class GmailController {
         }
 
         System.out.println("Message Details were updated for " + messagesUpdated + " messages");
+    }
+
+    public void testUpdateMessageHistory() throws Exception {
+        updateMessageHistory("4755298");
+    }
+
+
+    public void updateMessageHistory(String historyId) throws Exception {
+        final List<History> messageHistory = GmailApiService.getMessageHistoryFrom(historyId);
+        extractEventsFromHistory(messageHistory);
+    }
+
+    private void extractEventsFromHistory(List<History> histories) throws Exception {
+        for (History history : histories) {
+            List<HistoryLabelAdded> labelsAdded = history.getLabelsAdded();
+            List<HistoryLabelRemoved> labelsRemoved = history.getLabelsRemoved();
+            List<HistoryMessageAdded> messagesAdded = history.getMessagesAdded();
+            List<HistoryMessageDeleted> messagesDeleted = history.getMessagesDeleted();
+            List<Message> messages = history.getMessages(); // Not clear this will be used for anything, per docs
+            BigInteger historyId = history.getId();
+
+            System.out.println("Checking historyId: " + historyId);
+
+            if (labelsAdded != null && labelsAdded.size() > 0) {
+                System.out.println("Labels Added: " + labelsAdded.size());
+            }
+
+            if (labelsRemoved != null && labelsRemoved.size() > 0) {
+                System.out.println("Labels Removed: " + labelsRemoved.size());
+                for (HistoryLabelRemoved labelRemoved : labelsRemoved) {
+                    List<String> labelIds = labelRemoved.getLabelIds();
+                    Message message = labelRemoved.getMessage();
+
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message was removed from inbox");
+                    }
+
+                    if (labelIds.contains("UNREAD")) {
+                        // how to tell if it was read while in the inbox?
+                        System.out.println("Message was read");
+                    }
+
+                    labelIds.remove("INBOX");
+                    labelIds.remove("UNREAD");
+                    if (labelIds.size() > 0) {
+                        System.out.println("Unknown label(s) removed from message: " + labelIds);
+                    }
+                }
+            }
+
+            if (messagesAdded != null && messagesAdded.size() > 0) {
+                System.out.println("Messages Added: " + messagesAdded.size());
+
+
+                for (HistoryMessageAdded messageAdded : messagesAdded) {
+                    List<String> labelIds = messageAdded.getMessage().getLabelIds();
+
+                    if (labelIds.contains("INBOX") && labelIds.contains("UNREAD")) {
+                        final String messageId = messageAdded.getMessage().getId();
+                        final GmailMessage messageById = getMessageById(messageId);
+                        final Long internalDate = messageById.getInternalDate();
+                        final Date convertedDate = new Date(internalDate);
+
+                        System.out.println("Internal Date of new inbox message: " + convertedDate);
+                    }
+
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message added to inbox");
+                    }
+
+                    if (labelIds.contains("UNREAD")) {
+                        System.out.println("Message newly unread (might be newly received)");
+                    }
+
+                    // Do we care about any of these?
+                    for (String remainingLabel : labelIds) {
+                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
+                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
+                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
+                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
+                                || remainingLabel.startsWith("Label_")
+                                ) {
+                            continue;
+                        }
+
+                        System.out.println("Message added with unknown labelIds: " + labelIds);
+                        break;
+                    }
+                }
+            }
+
+            if (messagesDeleted != null && messagesDeleted.size() > 0) {
+                System.out.println("Messages Deleted: (" + messagesDeleted.size() + ")");
+                // Unless it was directly deleted from inbox, not sure if we care
+
+                for (HistoryMessageDeleted messageDeleted : messagesDeleted) {
+                    List<String> labelIds = messageDeleted.getMessage().getLabelIds();
+
+                    if (labelIds.contains("INBOX")) {
+                        System.out.println("Message deleted from INBOX");
+                    }
+
+
+                    for (String remainingLabel : labelIds) {
+                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
+                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
+                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
+                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
+                                || remainingLabel.startsWith("Label_")
+                                ) {
+                            continue;
+                        }
+
+                        System.out.println("Message deleted with unknown labelIds: " + labelIds);
+                        break;
+                    }
+
+                }
+            }
+
+
+        }
+
+//        for (History history : histories) {
+//            System.out.println(" --- Next history: ");
+//            System.out.println(history.toPrettyString());
+//        }
+
+
     }
 }

@@ -21,6 +21,7 @@ import java.io.InputStreamReader;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
@@ -141,7 +142,7 @@ public class GmailApiService {
     }
 
 
-    public static Message getMessageInfo(String messageId) throws IOException {
+    public static Message getMessageInfoFromApi(String messageId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
@@ -256,7 +257,9 @@ public class GmailApiService {
         return messagesOverall;
     }
 
-    public static void showMessageHistory(String startHistoryId) throws IOException {
+    // Should be separated into fetching the history ID (this class)
+    // And doing something with it (controller class)
+    public static List<History> getMessageHistoryFrom(String startHistoryId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
@@ -280,119 +283,7 @@ public class GmailApiService {
         }
 
         System.out.println("Done collecting histories");
-
-        for (History history : histories) {
-            List<HistoryLabelAdded> labelsAdded = history.getLabelsAdded();
-            List<HistoryLabelRemoved> labelsRemoved = history.getLabelsRemoved();
-            List<HistoryMessageAdded> messagesAdded = history.getMessagesAdded();
-            List<HistoryMessageDeleted> messagesDeleted = history.getMessagesDeleted();
-            List<Message> messages = history.getMessages(); // Not clear this will be used for anything, per docs
-            BigInteger historyId = history.getId();
-
-            System.out.println("Checking historyId: " + historyId);
-
-            if (labelsAdded != null && labelsAdded.size() > 0) {
-                System.out.println("Labels Added: " + labelsAdded.size());
-            }
-
-            if (labelsRemoved != null && labelsRemoved.size() > 0) {
-                System.out.println("Labels Removed: " + labelsRemoved.size());
-                for (HistoryLabelRemoved labelRemoved : labelsRemoved) {
-                    List<String> labelIds = labelRemoved.getLabelIds();
-                    Message message = labelRemoved.getMessage();
-
-                    if (labelIds.contains("INBOX")) {
-                        System.out.println("Message was removed from inbox");
-                    }
-
-                    if (labelIds.contains("UNREAD")) {
-                        System.out.println("Message was read");
-                    }
-
-                    labelIds.remove("INBOX");
-                    labelIds.remove("UNREAD");
-                    if (labelIds.size() > 0) {
-                        System.out.println("Unknown label(s) removed from message: " + labelIds);
-                    }
-                }
-            }
-
-            if (messagesAdded != null && messagesAdded.size() > 0) {
-                System.out.println("Messages Added: " + messagesAdded.size());
-
-
-                for (HistoryMessageAdded messageAdded : messagesAdded) {
-                    List<String> labelIds = messageAdded.getMessage().getLabelIds();
-
-                    if (labelIds.contains("INBOX")) {
-                        System.out.println("Message added to inbox");
-                    }
-
-                    if (labelIds.contains("UNREAD")) {
-                        System.out.println("Message newly unread (might be newly received)");
-                    }
-
-                    // Do we care about any of these?
-                    for (String remainingLabel : labelIds) {
-                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
-                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
-                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
-                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
-                                || remainingLabel.startsWith("Label_")
-                                ) {
-                            continue;
-                        }
-
-                        System.out.println("Message added with unknown labelIds: " + labelIds);
-                        break;
-                    }
-                }
-            }
-
-            if (messagesDeleted != null && messagesDeleted.size() > 0) {
-                System.out.println("Messages Deleted: (" + messagesDeleted.size() + ")");
-                // Unless it was directly deleted from inbox, not sure if we care
-
-                for (HistoryMessageDeleted messageDeleted : messagesDeleted) {
-                    List<String> labelIds = messageDeleted.getMessage().getLabelIds();
-
-                    if (labelIds.contains("INBOX")) {
-                        System.out.println("Message deleted from INBOX");
-                    }
-
-
-                    for (String remainingLabel : labelIds) {
-                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
-                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
-                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
-                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
-                                || remainingLabel.startsWith("Label_")
-                                ) {
-                            continue;
-                        }
-
-                        System.out.println("Message deleted with unknown labelIds: " + labelIds);
-                        break;
-                    }
-
-                }
-            }
-
-
-        }
-
-        // messagesAdded
-        // messages added to Inbox (check label: INBOX)
-
-        // labelsRemoved
-        // messages read (check label removed: UNREAD)
-
-        // messagesDeleted
-
-        for (History history : histories) {
-            System.out.println(" --- Next history: ");
-            System.out.println(history.toPrettyString());
-        }
+        return histories;
     }
 
 

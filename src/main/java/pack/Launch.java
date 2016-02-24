@@ -34,7 +34,7 @@ public class Launch {
 
         gmailController.resyncInbox(); // Update inbox
 
-        //GmailApiService.getMessageInfo("7209405991688");
+        //GmailApiService.getMessageInfoFromApi("7209405991688");
         //GmailApiService.getLabelInfo("INBOX");
         //GmailApiService.scanAllMessagesWithLabel("INBOX");
         //PubSubClient.doPull();
@@ -44,7 +44,8 @@ public class Launch {
 
         // 4755298
         // 4755302
-        GmailApiService.showMessageHistory("4755298");
+        // "4755298"
+        gmailController.testUpdateMessageHistory();
 
 
 
