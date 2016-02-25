@@ -134,7 +134,7 @@ public class GmailController {
 
         // ---------- Record historyId of latest message with label info for use in future updates
         final String latestMessageId = inboxMessages.get(0).getId();
-        final Message latestMessage = GmailApiService.getMessageInfoFromApi(latestMessageId);
+        final Message latestMessage = GmailApiService.getMessageByIdFromApi(latestMessageId);
         final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
         gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
         labelDao.update(gmailLabelUpdate);
@@ -178,15 +178,7 @@ public class GmailController {
                         firstResult.setThreadId(newThreadId);
                         updated = true;
                     }
-                    // this is the wrong place to do this, internaldate is null in these API results
-                    if (
-                            (oldInternalDate != null || newInternalDate != null)
-                                    && !oldInternalDate.equals(newInternalDate)
-                            ) {
-                        System.out.println("InternalDate has changed for message: " + firstResult.getId());
-                        firstResult.setInternalDate(newInternalDate);
-                        updated = true;
-                    }
+
 
                     if (updated) {
                         messageDao.update(firstResult);
@@ -211,7 +203,7 @@ public class GmailController {
         sortMessageDetails(); // Prepares and displays statistics
     }
 
-    private GmailMessage getMessageById(String messageId) throws Exception {
+    private GmailMessage getMessageByIdFromDatabase(String messageId) throws Exception {
         GmailMessage gmailMessage = null;
 
         HashMap<String, Object> queryMap = new HashMap<>();
@@ -253,7 +245,8 @@ public class GmailController {
     // Gets extra information from message Id (i.e. header information)
     private void updateMessageDetails() throws SQLException, IOException {
         QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
-        qb.where().isNull(GmailMessage.FIELD_HEADER_FROM);
+        qb.where().isNull(GmailMessage.FIELD_HEADER_FROM)
+                .or().isNull(GmailMessage.FIELD_INTERNAL_DATE);
 
         final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper());
         final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
@@ -261,12 +254,22 @@ public class GmailController {
         System.out.println("Found " + matchingMessagesResults.size() + " messages without From header data");
 
         int messagesUpdated = 0;
-        for (GmailMessage nextMessage : matchingMessagesResults) {
-            final String nextMessageId = nextMessage.getMessageId();
-            final Message latestMessage = GmailApiService.getMessageInfoFromApi(nextMessageId);
+        for (GmailMessage nextMessageToPopulate : matchingMessagesResults) {
+            final String nextMessageId = nextMessageToPopulate.getMessageId();
+            final Message latestPopulatedMessageFromApi = GmailApiService.getMessageByIdFromApi(nextMessageId);
 
+            // Set InternalDate on DB Entity
+            final Long internalDateFromApi = latestPopulatedMessageFromApi.getInternalDate();
+            if (internalDateFromApi != null) {
+                nextMessageToPopulate.setInternalDate(internalDateFromApi);
+            } else {
+                System.out.println("Message from API has no InternalDate value");
+            }
+
+
+            // Set "From" header value on DB Entity
             String fromHeaderValue = null;
-            final List<MessagePartHeader> messageHeaders = latestMessage.getPayload().getHeaders();
+            final List<MessagePartHeader> messageHeaders = latestPopulatedMessageFromApi.getPayload().getHeaders();
             for (MessagePartHeader header : messageHeaders) {
                 if (header.getName().equals("From")) {
                     fromHeaderValue = header.getValue();
@@ -276,10 +279,10 @@ public class GmailController {
             if (fromHeaderValue == null) {
                 System.out.println("Could not find 'From' header for messageId: " + nextMessageId);
             } else {
-                nextMessage.setHeaderFrom(fromHeaderValue);
-                messageDao.update(nextMessage);
+                nextMessageToPopulate.setHeaderFrom(fromHeaderValue);
             }
 
+            messageDao.update(nextMessageToPopulate); // Assumes there was some change...
             messagesUpdated++;
         }
 
@@ -343,11 +346,24 @@ public class GmailController {
 
                     if (labelIds.contains("INBOX") && labelIds.contains("UNREAD")) {
                         final String messageId = messageAdded.getMessage().getId();
-                        final GmailMessage messageById = getMessageById(messageId);
-                        final Long internalDate = messageById.getInternalDate();
-                        final Date convertedDate = new Date(internalDate);
+                        final GmailMessage messageFromDatabase = getMessageByIdFromDatabase(messageId);
 
-                        System.out.println("Internal Date of new inbox message: " + convertedDate);
+                        if (messageFromDatabase == null) {
+                            System.out.println("Message referenced in history does not exist in database");
+                            // Should probably fetch the info on it here, and add it to database...!
+                            continue;
+                        }
+
+                        final Long internalDate = messageFromDatabase.getInternalDate();
+                        if (internalDate == null) {
+                            System.out.println("Message in database has null internalDate");
+                        } else {
+                            final Date convertedDate = new Date(internalDate);
+                            System.out.println("Internal Date of new inbox message: " + convertedDate);
+                        }
+
+
+
                     }
 
                     if (labelIds.contains("INBOX")) {
@@ -360,11 +376,13 @@ public class GmailController {
 
                     // Do we care about any of these?
                     for (String remainingLabel : labelIds) {
-                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD") ||
-                                remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES") ||
-                                remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL") ||
-                                remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
-                                || remainingLabel.startsWith("Label_")
+                        if (remainingLabel.equals("INBOX") || remainingLabel.equals("UNREAD")
+                                || remainingLabel.equals("CHAT") || remainingLabel.equals("SPAM")
+                                || remainingLabel.equals("CATEGORY_PROMOTIONS") || remainingLabel.equals("CATEGORY_UPDATES")
+                                || remainingLabel.equals("CATEGORY_SOCIAL") || remainingLabel.equals("CATEGORY_PERSONAL")
+                                || remainingLabel.equals("CATEGORY_FORUMS")
+
+                                        || remainingLabel.startsWith("Label_")
                                 ) {
                             continue;
                         }

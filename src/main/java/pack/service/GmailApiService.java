@@ -142,7 +142,7 @@ public class GmailApiService {
     }
 
 
-    public static Message getMessageInfoFromApi(String messageId) throws IOException {
+    public static Message getMessageByIdFromApi(String messageId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 

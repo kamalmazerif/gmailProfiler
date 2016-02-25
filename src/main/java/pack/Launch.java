@@ -34,7 +34,7 @@ public class Launch {
 
         gmailController.resyncInbox(); // Update inbox
 
-        //GmailApiService.getMessageInfoFromApi("7209405991688");
+        //GmailApiService.getMessageByIdFromApi("7209405991688");
         //GmailApiService.getLabelInfo("INBOX");
         //GmailApiService.scanAllMessagesWithLabel("INBOX");
         //PubSubClient.doPull();
