@@ -76,7 +76,7 @@ public class GmailController {
                 TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
                 TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
                 Schema newSchema = new Schema(appName);
-                newSchema.setSchemaVersion(1L);
+                newSchema.setSchemaVersion(2L);
                 schemaObject = newSchema;
                 schemaDao.create(newSchema);
 
@@ -97,8 +97,8 @@ public class GmailController {
                 System.out.println("Upgraded schema for " + appName + " to verison " + schemaObject.getSchemaVersion());
 
             } else if (schemaObject.getSchemaVersion() == 2) {
-                // Expected Schema version
                 // Upgrade code would go here
+                System.out.println("Schema version is the latest: " + schemaObject.getSchemaVersion());
             } else {
                 throw new Exception("Unknown schema version: " + schemaObject.getSchemaVersion());
             }
@@ -361,8 +361,6 @@ public class GmailController {
                             final Date convertedDate = new Date(internalDate);
                             System.out.println("Internal Date of new inbox message: " + convertedDate);
                         }
-
-
 
                     }
 
