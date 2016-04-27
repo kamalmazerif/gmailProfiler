@@ -6,6 +6,7 @@ import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.json.JsonFactory;
@@ -265,25 +266,52 @@ public class GmailApiService {
 
 
         BigInteger startHistoryIdBigInteger = BigInteger.valueOf(Long.valueOf(startHistoryId));
-        ListHistoryResponse response = service.users().history().list("me")
-                .setStartHistoryId(startHistoryIdBigInteger).execute();
+        final Gmail.Users.History.List request = service.users().history().list("me")
+                .setStartHistoryId(startHistoryIdBigInteger);
 
         List<History> histories = new ArrayList<History>();
-        while (response.getHistory() != null) {
-            histories.addAll(response.getHistory());
-            if (response.getNextPageToken() != null) {
-                String pageToken = response.getNextPageToken();
-                System.out.println("Getting next page, token: " + pageToken);
-                response = service.users().history().list("me").setPageToken(pageToken)
-                        .setStartHistoryId(startHistoryIdBigInteger).execute();
-            } else {
-                System.out.println("Response has no next page");
-                break;
+        try {
+            ListHistoryResponse response = request.execute();
+
+            while (response.getHistory() != null) {
+                histories.addAll(response.getHistory());
+                if (response.getNextPageToken() != null) {
+                    String pageToken = response.getNextPageToken();
+                    System.out.println("Getting next page, token: " + pageToken);
+                    response = service.users().history().list("me").setPageToken(pageToken)
+                            .setStartHistoryId(startHistoryIdBigInteger).execute();
+                } else {
+                    System.out.println("Response has no next page");
+                    break;
+                }
             }
+
+        } catch (GoogleJsonResponseException e) {
+            System.out.println("---");
+            System.out.println(e.getClass().getCanonicalName() + " occurred when accessing history info for history id: " + startHistoryIdBigInteger + ", details: " + e.getDetails().toString());
         }
 
         System.out.println("Done collecting histories");
         return histories;
+    }
+
+    public static boolean isHistoryIdValid(String historyId) throws IOException {
+        // Build a new authorized API client service.
+        Gmail service = getGmailService();
+
+        BigInteger startHistoryIdBigInteger = BigInteger.valueOf(Long.valueOf(historyId));
+        final Gmail.Users.History.List request = service.users().history().list("me")
+                .setStartHistoryId(startHistoryIdBigInteger);
+        try {
+            ListHistoryResponse response = request.execute();
+        } catch (GoogleJsonResponseException e) {
+            if (e.getDetails().getCode() == 404) {
+                return false;
+            }
+
+            throw e; // Not sure what is wrong, so rethrow
+        }
+        return true;
     }
 
 

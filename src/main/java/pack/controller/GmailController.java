@@ -13,6 +13,7 @@ import com.j256.ormlite.dao.GenericRawResults;
 import com.j256.ormlite.jdbc.JdbcConnectionSource;
 import com.j256.ormlite.stmt.QueryBuilder;
 import com.j256.ormlite.stmt.SelectArg;
+import com.j256.ormlite.stmt.Where;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
 import org.springframework.stereotype.Component;
@@ -91,14 +92,21 @@ public class GmailController {
 
             if (schemaObject.getSchemaVersion() == 1) {
                 // Usually should do a version check before upgrading database
-                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN internalDate BIGINT;");
+                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN " + GmailMessage.FIELD_INTERNAL_DATE + " BIGINT;");
                 schemaObject.setSchemaVersion(2L);
                 schemaDao.update(schemaObject);
                 System.out.println("Upgraded schema for " + appName + " to verison " + schemaObject.getSchemaVersion());
 
             } else if (schemaObject.getSchemaVersion() == 2) {
                 // Upgrade code would go here
+                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN " + GmailMessage.FIELD_HISTORY_ID +" BIGINT;");
+                schemaObject.setSchemaVersion(3L);
+                schemaDao.update(schemaObject);
+
+            } else if (schemaObject.getSchemaVersion() == 3) {
+                // Upgrade code would go here
                 System.out.println("Schema version is the latest: " + schemaObject.getSchemaVersion());
+
             } else {
                 throw new Exception("Unknown schema version: " + schemaObject.getSchemaVersion());
             }
@@ -246,10 +254,15 @@ public class GmailController {
     private void updateMessageDetails() throws SQLException, IOException {
         QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
         qb.where().isNull(GmailMessage.FIELD_HEADER_FROM)
-                .or().isNull(GmailMessage.FIELD_INTERNAL_DATE);
+                .or().isNull(GmailMessage.FIELD_INTERNAL_DATE)
+                .or().isNull(GmailMessage.FIELD_HISTORY_ID); // Field was added later
+
 
         final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper());
         final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
+
+        // As an alternative, this code will update all messages
+        // final List<GmailMessage> matchingMessagesResults = messageDao.queryForAll();
 
         System.out.println("Found " + matchingMessagesResults.size() + " messages without From header data");
 
@@ -257,6 +270,13 @@ public class GmailController {
         for (GmailMessage nextMessageToPopulate : matchingMessagesResults) {
             final String nextMessageId = nextMessageToPopulate.getMessageId();
             final Message latestPopulatedMessageFromApi = GmailApiService.getMessageByIdFromApi(nextMessageId);
+
+            final BigInteger historyIdFromApi = latestPopulatedMessageFromApi.getHistoryId();
+            if (historyIdFromApi != null) {
+                nextMessageToPopulate.setHistoryId(historyIdFromApi.longValue());
+            } else {
+                System.out.println("Message from API has no historyId value");
+            }
 
             // Set InternalDate on DB Entity
             final Long internalDateFromApi = latestPopulatedMessageFromApi.getInternalDate();
@@ -289,8 +309,14 @@ public class GmailController {
         System.out.println("Message Details were updated for " + messagesUpdated + " messages");
     }
 
-    public void testUpdateMessageHistory() throws Exception {
-        updateMessageHistory("4755298");
+    public void testUpdateMessageHistory(int i) throws Exception {
+        updateMessageHistory(i + "");
+    }
+
+    public boolean testCheckMessageHistory(long i) throws IOException {
+        final boolean historyIdValid = GmailApiService.isHistoryIdValid(i + "");
+        System.out.println("History id " + i + " valid?: " + historyIdValid);
+        return historyIdValid;
     }
 
 
@@ -430,4 +456,56 @@ public class GmailController {
 
 
     }
+
+    public String findNextValidHistoryId() throws SQLException, IOException {
+        return findNextValidHistoryId(null);
+    }
+
+    public String findNextValidHistoryId(String hint) throws SQLException, IOException {
+        QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
+        if (hint != null) {
+            qb.where().ge(GmailMessage.FIELD_HISTORY_ID, hint);
+        }
+        qb.orderBy(GmailMessage.FIELD_INTERNAL_DATE, true); // Field was added later
+
+        final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper());
+        final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
+
+        System.out.println("Found " + matchingMessagesResults.size() + " messages with greater history ID");
+
+        int lower = 0;
+        int upper = matchingMessagesResults.size()-1;
+
+
+        while (lower != upper) {
+            final Long lowerHistoryId = matchingMessagesResults.get(lower).getHistoryId();
+            final Long upperHistoryId = matchingMessagesResults.get(upper).getHistoryId();
+            System.out.println("Looking for matching history id between " + lower + "(" + lowerHistoryId + ") and " + upper + "(" + upperHistoryId + ")");
+
+            int test = (lower + upper) / 2;
+
+            final Long testHistoryId = matchingMessagesResults.get(test).getHistoryId();
+            final boolean isTestHistoryIdValid = testCheckMessageHistory(testHistoryId);
+
+            if (isTestHistoryIdValid) {
+                if (upper != test) {
+                    upper = test; // reduce upper
+                } else {
+                    upper--; // upper == test both valid so decrement
+                }
+
+            } else {
+                if (lower != test) {
+                    lower = test; // increase lower
+                } else {
+                    lower++; // lower == test both invalid so increment
+                }
+            }
+        }
+
+        System.out.println("Found matching history id " + lower + "(" + matchingMessagesResults.get(lower).getHistoryId() + ")");
+
+        return "";
+    }
+
 }

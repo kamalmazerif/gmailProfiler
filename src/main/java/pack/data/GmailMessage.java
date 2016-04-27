@@ -11,6 +11,7 @@ import com.j256.ormlite.table.DatabaseTable;
 public class GmailMessage {
 
     public static final String FIELD_MESSAGE_ID = "messageId";
+    public static final String FIELD_HISTORY_ID = "historyId";
     public static final String FIELD_THREAD_ID = "threadId";
     public static final String FIELD_HEADER_FROM = "headerFrom";
     public static final String FIELD_INTERNAL_DATE = "internalDate";
@@ -22,6 +23,9 @@ public class GmailMessage {
     // MessageId and ThreadId always provided in Summary view
     @DatabaseField(columnName = FIELD_MESSAGE_ID, canBeNull = false)
     private String messageId;
+
+    @DatabaseField(columnName = FIELD_HISTORY_ID, canBeNull = false)
+    private Long historyId;
 
     // MessageId and ThreadId always provided in Summary view
     @DatabaseField(columnName = FIELD_THREAD_ID, canBeNull = false)
@@ -45,6 +49,7 @@ public class GmailMessage {
     @Override
     public int hashCode() {
         return ("" + messageId
+                + "-" + historyId
                 + "-" + threadId
                 + "-" + headerFrom
                 + "-" + internalDate
@@ -57,6 +62,7 @@ public class GmailMessage {
             return false;
         }
         return messageId.equals(((GmailMessage) other).messageId)
+                && historyId.equals(((GmailMessage) other).historyId)
                 && threadId.equals(((GmailMessage) other).threadId)
                 && headerFrom.equals(((GmailMessage) other).headerFrom)
                 && internalDate.equals(((GmailMessage) other).internalDate);
@@ -102,5 +108,13 @@ public class GmailMessage {
 
     public Long getInternalDate() {
         return internalDate;
+    }
+
+    public Long getHistoryId() {
+        return historyId;
+    }
+
+    public void setHistoryId(Long historyId) {
+        this.historyId = historyId;
     }
 }
