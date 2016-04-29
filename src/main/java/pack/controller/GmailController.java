@@ -148,7 +148,7 @@ public class GmailController {
 
 
         // ---------- Get all messages
-        List<com.google.api.services.gmail.model.Message> inboxMessages = GmailApiService.scanAllMessagesWithLabel("INBOX");
+        List<com.google.api.services.gmail.model.Message> inboxMessages = GmailApiService.getAllMessagesForLabel("INBOX");
 
         // ---------- Record historyId of latest message with label info for use in future updates
         final String latestMessageId = inboxMessages.get(0).getId();
@@ -326,7 +326,7 @@ public class GmailController {
     }
 
 
-    public void updateMessageHistory(String historyId) throws Exception {
+    public void updateTasksForHistory(String historyId) throws Exception {
         final List<History> messageHistory = GmailApiService.getMessageHistoryFrom(historyId);
 
         persistNewHistoryData(messageHistory);

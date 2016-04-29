@@ -142,7 +142,6 @@ public class GmailApiService {
 
     }
 
-
     public static Message getMessageByIdFromApi(String messageId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
@@ -169,53 +168,7 @@ public class GmailApiService {
         return label;
     }
 
-//    public static void scanAllMessagesWithLabel(String labelId) throws IOException, InterruptedException {
-//        // Build a new authorized API client service.
-//        Gmail service = getGmailService();
-//
-//        final String userId = "me";
-//        ListMessagesResponse response = service.users().messages().list(userId)
-//                .setLabelIds(Arrays.asList(labelId)).execute();
-//
-//        List<Message> messagesOverall = new ArrayList<Message>();
-//
-//
-//
-//        HashMap<String, Message> messageMap = new HashMap<>();
-//
-//
-//
-//
-//        while (messagesOnPage != null) {
-//            List<Message> messagesOnPage = response.getMessages();
-//            for (Message nextMessage : messagesOnPage) {
-//                if (messageMap.containsKey(nextMessage.getId())) {
-//                    System.out.println("Duplicate message id: " + nextMessage.getId());
-//                } else {
-//                    messageMap.put(nextMessage.getId(), nextMessage);
-//                }
-//            }
-//
-//            messagesOverall.addAll(messagesOnPage);
-//            System.out.println("Added " + messagesOnPage.size() + " messages, " + messagesOverall.size() + " messages total, Est. results size: " + response.getResultSizeEstimate());
-//            if (response.getNextPageToken() != null) {
-//                String pageToken = response.getNextPageToken();
-//                response = service.users().messages().list(userId).setLabelIds(Arrays.asList(labelId))
-//                        .setPageToken(pageToken).execute();
-//            } else {
-//                break;
-//            }
-//        }
-//
-//        System.out.println("Message map size: " + messageMap.size());
-//
-//        for (Message message : messagesOverall) {
-//            System.out.println(message.toPrettyString());
-//            Thread.currentThread().sleep(1000);
-//        }
-//    }
-
-    public static List<Message> scanAllMessagesWithLabel(String labelId) throws IOException, InterruptedException {
+    public static List<Message> getAllMessagesForLabel(String labelId) throws IOException, InterruptedException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
@@ -223,14 +176,12 @@ public class GmailApiService {
         ListMessagesResponse response = service.users().messages().list(userId)
                 .setLabelIds(Arrays.asList(labelId)).execute();
 
-        List<Message> messagesOverall = new ArrayList<Message>();
+        List<Message> messagesFromAllPages = new ArrayList<Message>();
         HashMap<String, Message> messageMap = new HashMap<>();
-
-
-
 
         while (response.getMessages() != null) {
 
+            // Analyze/peek messages on this page
             for (Message nextMessage : response.getMessages()) {
                 if (nextMessage.getHistoryId() != null) {
                     System.out.println("Found history ID: " + nextMessage.getHistoryId());
@@ -241,21 +192,21 @@ public class GmailApiService {
                     messageMap.put(nextMessage.getId(), nextMessage);
                 }
             }
+            messagesFromAllPages.addAll(response.getMessages());
 
-            messagesOverall.addAll(response.getMessages());
-            System.out.println("Added " + response.getMessages().size() + " messages, " + messagesOverall.size() + " messages total, Est. results size: " + response.getResultSizeEstimate());
+            System.out.println("Added " + response.getMessages().size() + " messages, " + messagesFromAllPages.size() + " messages total, Est. results size: " + response.getResultSizeEstimate() + ", fetching next page");
             if (response.getNextPageToken() != null) {
                 String pageToken = response.getNextPageToken();
                 response = service.users().messages().list(userId).setLabelIds(Arrays.asList(labelId))
                         .setPageToken(pageToken).execute();
             } else {
+                // There is no next page
                 break;
             }
         }
 
-        System.out.println("Message map size: " + messageMap.size());
-
-        return messagesOverall;
+        System.out.println("Messages found: "+ messagesFromAllPages.size() +", Unique Id: " + messageMap.size());
+        return messagesFromAllPages;
     }
 
     // Should be separated into fetching the history ID (this class)
