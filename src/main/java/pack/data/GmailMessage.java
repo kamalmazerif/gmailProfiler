@@ -24,9 +24,6 @@ public class GmailMessage {
     @DatabaseField(columnName = FIELD_MESSAGE_ID, canBeNull = false)
     private String messageId;
 
-    @DatabaseField(columnName = FIELD_HISTORY_ID, canBeNull = false)
-    private Long historyId;
-
     // MessageId and ThreadId always provided in Summary view
     @DatabaseField(columnName = FIELD_THREAD_ID, canBeNull = false)
     private String threadId;
@@ -36,6 +33,10 @@ public class GmailMessage {
 
     @DatabaseField(columnName = FIELD_INTERNAL_DATE, canBeNull = true)
     private Long internalDate;
+
+    @DatabaseField(columnName = FIELD_HISTORY_ID, canBeNull = true)
+    private Long historyId;
+
 
     GmailMessage() {
         // all persisted classes must define a no-arg constructor with at least package visibility
