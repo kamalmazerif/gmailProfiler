@@ -13,13 +13,13 @@ import com.j256.ormlite.dao.GenericRawResults;
 import com.j256.ormlite.jdbc.JdbcConnectionSource;
 import com.j256.ormlite.stmt.QueryBuilder;
 import com.j256.ormlite.stmt.SelectArg;
-import com.j256.ormlite.stmt.Where;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
 import org.springframework.stereotype.Component;
 import pack.Launch;
 import pack.data.GmailLabelUpdate;
 import pack.data.GmailMessage;
+import pack.data.HistoryEvent;
 import pack.data.Schema;
 import pack.service.GmailApiService;
 
@@ -42,13 +42,14 @@ public class GmailController {
 
     private final static String DATABASE_URL_MEMORY = "jdbc:h2:mem:account";  // Check if table name must be here
     private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
-    private final static Long DATABASE_SCHEMA_LATEST_VERSION = 3L;
+    private final static Long DATABASE_SCHEMA_LATEST_VERSION = 4L;
 
 
     // Second generic parameter appears to be wrong, should match the type of ID field
     private Dao<GmailMessage, String> messageDao;
     private Dao<GmailLabelUpdate, String> labelDao;
     private Dao<Schema, String> schemaDao;
+    private Dao<HistoryEvent, String> historyDao;
 
     @PostConstruct
     private void databaseInit() throws Exception { // Throwing on @PostConstruct method will cause application to exit
@@ -66,6 +67,7 @@ public class GmailController {
             schemaDao = DaoManager.createDao(connectionSource, Schema.class);
             labelDao = DaoManager.createDao(connectionSource, GmailLabelUpdate.class);
             messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
+            historyDao = DaoManager.createDao(connectionSource, HistoryEvent.class);
 
 
             HashMap<String, Object> queryMap = new HashMap<>();
@@ -104,6 +106,13 @@ public class GmailController {
                 schemaObject.setSchemaVersion(3L);
                 schemaDao.update(schemaObject);
 
+            }
+
+            if (schemaObject.getSchemaVersion() == 3) {
+                // Add HistoryEvent table
+                TableUtils.createTableIfNotExists(connectionSource, HistoryEvent.class);
+                schemaObject.setSchemaVersion(4L);
+                schemaDao.update(schemaObject);
             }
 
             if (schemaObject.getSchemaVersion() == DATABASE_SCHEMA_LATEST_VERSION) {
@@ -310,10 +319,6 @@ public class GmailController {
         System.out.println("Message Details were updated for " + messagesUpdated + " messages");
     }
 
-    public void testUpdateMessageHistory(int i) throws Exception {
-        updateMessageHistory(i + "");
-    }
-
     public boolean testCheckMessageHistory(long i) throws IOException {
         final boolean historyIdValid = GmailApiService.isHistoryIdValid(i + "");
         System.out.println("History id " + i + " valid?: " + historyIdValid);
@@ -323,7 +328,40 @@ public class GmailController {
 
     public void updateMessageHistory(String historyId) throws Exception {
         final List<History> messageHistory = GmailApiService.getMessageHistoryFrom(historyId);
-        extractEventsFromHistory(messageHistory);
+
+        persistNewHistoryData(messageHistory);
+
+        // extractEventsFromHistory(messageHistory);
+    }
+
+    private void persistNewHistoryData(List<History> historyEventsFromApi) throws SQLException {
+        int historyEventsNew = 0;
+        int historyEventsAlreadyPersisted = 0;
+        int historyEventErrors = 0;
+
+        for (History historyEventFromApi : historyEventsFromApi) {
+            HashMap<String, Object> queryMap = new HashMap<>();
+            queryMap.put(HistoryEvent.FIELD_HISTORY_ID, historyEventFromApi.getId());
+            final List<HistoryEvent> alreadyPersistedHistoryEvents = historyDao.queryForFieldValues(queryMap);
+
+            if (alreadyPersistedHistoryEvents.size() == 0) {
+                HistoryEvent historyEventToPersist = new HistoryEvent();
+                historyEventToPersist.setHistoryId(historyEventFromApi.getId().longValue());
+                historyEventToPersist.setJson(historyEventFromApi.toString());
+                historyDao.create(historyEventToPersist);
+                historyEventsNew++;
+
+            } else if (alreadyPersistedHistoryEvents.size() == 1) {
+                historyEventsAlreadyPersisted++;
+
+            } else if (alreadyPersistedHistoryEvents.size() > 1) {
+                System.out.println("Unexpected:  More than one history event persisted!  historyId: " + historyEventFromApi.getId());
+                historyEventErrors++;
+
+            }
+        }
+
+        System.out.println("Processed " + historyEventsFromApi.size() + " history events from API, new: " + historyEventsNew + ", already persisted: " + historyEventsAlreadyPersisted + ", errors: " + historyEventErrors);
     }
 
     private void extractEventsFromHistory(List<History> histories) throws Exception {

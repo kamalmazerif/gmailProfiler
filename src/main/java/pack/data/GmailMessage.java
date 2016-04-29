@@ -58,7 +58,7 @@ public class GmailMessage {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(Object other) { // Do not compare database primary key
         if (other == null || !other.getClass().equals(getClass())) {
             return false;
         }
