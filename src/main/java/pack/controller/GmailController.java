@@ -42,6 +42,7 @@ public class GmailController {
 
     private final static String DATABASE_URL_MEMORY = "jdbc:h2:mem:account";  // Check if table name must be here
     private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
+    private final static Long DATABASE_SCHEMA_LATEST_VERSION = 3L;
 
 
     // Second generic parameter appears to be wrong, should match the type of ID field
@@ -77,7 +78,7 @@ public class GmailController {
                 TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
                 TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
                 Schema newSchema = new Schema(appName);
-                newSchema.setSchemaVersion(2L);
+                newSchema.setSchemaVersion(DATABASE_SCHEMA_LATEST_VERSION);
                 schemaObject = newSchema;
                 schemaDao.create(newSchema);
 
@@ -91,24 +92,24 @@ public class GmailController {
             System.out.println("Schema version for " + appName + " : " + schemaObject.getSchemaVersion());
 
             if (schemaObject.getSchemaVersion() == 1) {
-                // Usually should do a version check before upgrading database
                 messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN " + GmailMessage.FIELD_INTERNAL_DATE + " BIGINT;");
                 schemaObject.setSchemaVersion(2L);
                 schemaDao.update(schemaObject);
                 System.out.println("Upgraded schema for " + appName + " to verison " + schemaObject.getSchemaVersion());
 
-            } else if (schemaObject.getSchemaVersion() == 2) {
-                // Upgrade code would go here
-                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN " + GmailMessage.FIELD_HISTORY_ID +" BIGINT;");
+            }
+
+            if (schemaObject.getSchemaVersion() == 2) {
+                messageDao.executeRaw("ALTER TABLE `" + Schema.TABLE_NAME_GMAIL_MESSAGES + "` ADD COLUMN " + GmailMessage.FIELD_HISTORY_ID + " BIGINT;");
                 schemaObject.setSchemaVersion(3L);
                 schemaDao.update(schemaObject);
 
-            } else if (schemaObject.getSchemaVersion() == 3) {
-                // Upgrade code would go here
-                System.out.println("Schema version is the latest: " + schemaObject.getSchemaVersion());
+            }
 
+            if (schemaObject.getSchemaVersion() == DATABASE_SCHEMA_LATEST_VERSION) {
+                System.out.println("Schema version is the latest: " + schemaObject.getSchemaVersion());
             } else {
-                throw new Exception("Unknown schema version: " + schemaObject.getSchemaVersion());
+                throw new Exception("Schema version unknown or unexpected at this point: " + schemaObject.getSchemaVersion());
             }
 
         } catch (SQLException e) {
