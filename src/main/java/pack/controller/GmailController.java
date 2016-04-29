@@ -467,7 +467,9 @@ public class GmailController {
         if (hint != null) {
             qb.where().ge(GmailMessage.FIELD_HISTORY_ID, hint);
         }
-        qb.orderBy(GmailMessage.FIELD_INTERNAL_DATE, true); // Field was added later
+
+        // Previously this was sorted by FIELD_INTERNAL_DATE but that is probably not the most correct choice
+        qb.orderBy(GmailMessage.FIELD_HISTORY_ID, true); // Field was added later
 
         final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper());
         final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
