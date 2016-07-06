@@ -218,7 +218,6 @@ public class GmailController {
         System.out.println("Messages total: " + messageDao.countOf());
 
         updateMessageDetails(); // Collects axtra info on messages using api
-        sortMessageDetails(); // Prepares and displays statistics
     }
 
     private GmailMessage getMessageByIdFromDatabase(String messageId) throws Exception {
@@ -238,7 +237,7 @@ public class GmailController {
         return returnMessage;
     }
 
-    private void sortMessageDetails() throws SQLException {
+    public void printLargestSenderInfo(int minimumNumberOfMessages) throws SQLException {
         final List<GmailMessage> gmailMessages = messageDao.queryForAll();
         HashMap<String, Integer> senderCountMap = new HashMap<>();
 
@@ -252,7 +251,9 @@ public class GmailController {
             }
         }
 
-        Stream<Map.Entry<String,Integer>> sorted = senderCountMap.entrySet().stream()
+        Stream<Map.Entry<String,Integer>> sorted =
+                senderCountMap.entrySet().stream()
+                        .filter(p -> p.getValue().compareTo(minimumNumberOfMessages) > 0)
                 .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()));
         final Object[] objects = sorted.toArray();
         for (Object nextObject : objects) {
