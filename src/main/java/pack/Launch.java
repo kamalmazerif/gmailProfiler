@@ -23,7 +23,7 @@ public class Launch {
 
     @PostConstruct
     public void postConstruct() throws Exception {
-        // Confirmed this gets run
+
 
 
         //GmailApiService.listLabels();
@@ -69,5 +69,7 @@ public class Launch {
 //        System.out.println(labelInfo);
 
     }
+
+
 
 }

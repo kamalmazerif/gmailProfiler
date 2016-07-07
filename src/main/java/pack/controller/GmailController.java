@@ -43,6 +43,7 @@ public class GmailController {
     private final static String DATABASE_URL_MEMORY = "jdbc:h2:mem:account";  // Check if table name must be here
     private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
     private final static Long DATABASE_SCHEMA_LATEST_VERSION = 4L;
+    public static final String INBOX = "INBOX";
 
 
     // Second generic parameter appears to be wrong, should match the type of ID field
@@ -135,31 +136,24 @@ public class GmailController {
     public void resyncInbox() throws Exception {
         long updateTime = System.currentTimeMillis();
 
-        // ---------- Update Label info
-        com.google.api.services.gmail.model.Label targetLabel = GmailApiService.getLabelInfo("INBOX");
-        GmailLabelUpdate gmailLabelUpdate = new GmailLabelUpdate();
-        gmailLabelUpdate.setLabelName(targetLabel.getName());
-        gmailLabelUpdate.setMessagesTotal(targetLabel.getMessagesTotal());
-        gmailLabelUpdate.setMessagesUnread(targetLabel.getMessagesUnread());
-        gmailLabelUpdate.setThreadsTotal(targetLabel.getThreadsTotal());
-        gmailLabelUpdate.setThreadsUnread(targetLabel.getThreadsUnread());
-        gmailLabelUpdate.setUpdateTimeMillis(updateTime);
-        labelDao.create(gmailLabelUpdate);
+        // ---------- Update Label Summary
+        GmailLabelUpdate gmailLabelUpdate = updateLabelSummary(updateTime);
 
 
         // ---------- Get all messages
         List<com.google.api.services.gmail.model.Message> inboxMessages = GmailApiService.getAllMessagesForLabel("INBOX");
 
         // ---------- Record historyId of latest message with label info for use in future updates
-        final String latestMessageId = inboxMessages.get(0).getId();
-        final Message latestMessage = GmailApiService.getMessageByIdFromApi(latestMessageId);
-        final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
-        gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
-        labelDao.update(gmailLabelUpdate);
-        System.out.println("Updated label info with last history Id: " + historyIdBigIntegerToString);
+        updateLabelSummaryLatestHistoryId(gmailLabelUpdate, inboxMessages);
+
+        // ---------- Persist new or update existing messages that were fetched
+        mergeNewOrUpdatedMessages(inboxMessages);
 
 
-        // ---------- Process all messages that were fetched
+        updateMessageDetails(); // Collects axtra info on messages using api
+    }
+
+    private void mergeNewOrUpdatedMessages(List<Message> inboxMessages) throws Exception {
         // we specify a SelectArg here to generate a ? in statement string below
         QueryBuilder<GmailMessage, String> qb = messageDao.queryBuilder();
         qb.where().eq(GmailMessage.FIELD_MESSAGE_ID, new SelectArg());
@@ -168,14 +162,15 @@ public class GmailController {
         int messagesUpdated = 0;
         int messagesUnchanged = 0;
 
-        for (com.google.api.services.gmail.model.Message nextMessage : inboxMessages) {
-            final GenericRawResults<GmailMessage> matchingMessagesResultsContainer = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper(), nextMessage.getId());
-            final List<GmailMessage> matchingMessagesResults = matchingMessagesResultsContainer.getResults();
-            int numberOfMatches = matchingMessagesResults.size();
-
+        // for each message
+        for (Message nextMessage : inboxMessages) {
+            final GenericRawResults<GmailMessage> persistedMessagesResults = messageDao.queryRaw(qb.prepareStatementString(), messageDao.getRawRowMapper(), nextMessage.getId());
+            final List<GmailMessage> persistedMessages = persistedMessagesResults.getResults();
+            final int numberOfMatches = persistedMessages.size();
             final String newThreadId = nextMessage.getThreadId();
 
             if (numberOfMatches > 1) {
+                // Hasn't happened yet
                 throw new Exception ("Unexpected number of matches on existing message ID " + nextMessage.getId());
 
             } else {
@@ -183,7 +178,7 @@ public class GmailController {
 
                 if (numberOfMatches == 1) {
                     boolean updated = false;
-                    final GmailMessage firstResult = matchingMessagesResults.get(0);
+                    final GmailMessage firstResult = persistedMessages.get(0);
                     final String oldThreadId = firstResult.getThreadId();
                     final Long oldInternalDate = firstResult.getInternalDate();
 
@@ -216,8 +211,31 @@ public class GmailController {
 
         System.out.println("Added " + messagesAdded + " messages, updated " + messagesUpdated +" messages, " + messagesUnchanged + " messages unchanged");
         System.out.println("Messages total: " + messageDao.countOf());
+    }
 
-        updateMessageDetails(); // Collects axtra info on messages using api
+
+    // Update labelDao record with last history id
+    private void updateLabelSummaryLatestHistoryId(GmailLabelUpdate gmailLabelUpdate, List<Message> inboxMessages) throws IOException, SQLException {
+        final String latestMessageId = inboxMessages.get(0).getId();
+        final Message latestMessage = GmailApiService.getMessageByIdFromApi(latestMessageId);
+        final String historyIdBigIntegerToString = latestMessage.getHistoryId().toString();
+        gmailLabelUpdate.setLastHistoryId(Long.valueOf(historyIdBigIntegerToString));
+        labelDao.update(gmailLabelUpdate);
+        System.out.println("Updated label info with last history Id: " + historyIdBigIntegerToString);
+    }
+
+    // Add labelDao record with various summary info
+    private GmailLabelUpdate updateLabelSummary(long updateTime) throws IOException, SQLException {
+        com.google.api.services.gmail.model.Label targetLabel = GmailApiService.getLabelInfo(INBOX);
+        GmailLabelUpdate gmailLabelUpdate = new GmailLabelUpdate();
+        gmailLabelUpdate.setLabelName(targetLabel.getName());
+        gmailLabelUpdate.setMessagesTotal(targetLabel.getMessagesTotal());
+        gmailLabelUpdate.setMessagesUnread(targetLabel.getMessagesUnread());
+        gmailLabelUpdate.setThreadsTotal(targetLabel.getThreadsTotal());
+        gmailLabelUpdate.setThreadsUnread(targetLabel.getThreadsUnread());
+        gmailLabelUpdate.setUpdateTimeMillis(updateTime);
+        labelDao.create(gmailLabelUpdate);
+        return gmailLabelUpdate;
     }
 
     private GmailMessage getMessageByIdFromDatabase(String messageId) throws Exception {
