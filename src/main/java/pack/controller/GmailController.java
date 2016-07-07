@@ -15,7 +15,9 @@ import com.j256.ormlite.stmt.QueryBuilder;
 import com.j256.ormlite.stmt.SelectArg;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import pack.DaoOwner;
 import pack.Launch;
 import pack.data.GmailLabelUpdate;
 import pack.data.GmailMessage;
@@ -40,11 +42,8 @@ import java.util.stream.Stream;
 @Component
 public class GmailController {
 
-    private final static String DATABASE_URL_MEMORY = "jdbc:h2:mem:account";  // Check if table name must be here
-    private final static String DATABASE_URL_DISK = "jdbc:h2:db/testdb";
     private final static Long DATABASE_SCHEMA_LATEST_VERSION = 4L;
     public static final String INBOX = "INBOX";
-
 
     // Second generic parameter appears to be wrong, should match the type of ID field
     private Dao<GmailMessage, String> messageDao;
@@ -52,34 +51,34 @@ public class GmailController {
     private Dao<Schema, String> schemaDao;
     private Dao<HistoryEvent, String> historyDao;
 
+
+    @Autowired
+    private DaoOwner daoOwner;
+
     @PostConstruct
     private void databaseInit() throws Exception { // Throwing on @PostConstruct method will cause application to exit
+        System.out.println("GmailController postconstruct");
+
         final String appName = Launch.SCHEMA_APP_NAME;
 
         try {
-            ConnectionSource connectionSource = new JdbcConnectionSource(DATABASE_URL_DISK);
-
-            TableUtils.createTableIfNotExists(connectionSource, Schema.class);
-
+            TableUtils.createTableIfNotExists(daoOwner.getConnectionSource(), Schema.class);
             //TableUtils.dropTable(connectionSource, GmailLabelUpdate.class, true);
             //TableUtils.dropTable(connectionSource, GmailMessage.class, true);
 
-
-            schemaDao = DaoManager.createDao(connectionSource, Schema.class);
-            labelDao = DaoManager.createDao(connectionSource, GmailLabelUpdate.class);
-            messageDao = DaoManager.createDao(connectionSource, GmailMessage.class);
-            historyDao = DaoManager.createDao(connectionSource, HistoryEvent.class);
-
+            schemaDao = daoOwner.getSchemaDao();
+            labelDao = daoOwner.getLabelDao();
+            messageDao = daoOwner.getMessageDao();
+            historyDao = daoOwner.getHistoryDao();
 
             HashMap<String, Object> queryMap = new HashMap<>();
             queryMap.put(Schema.FIELD_SCHEMA_NAME, appName);
             final List<Schema> schemas = schemaDao.queryForFieldValues(queryMap);
 
-
             Schema schemaObject;
             if (schemas.size() == 0) {
-                TableUtils.createTableIfNotExists(connectionSource, GmailLabelUpdate.class);
-                TableUtils.createTableIfNotExists(connectionSource, GmailMessage.class);
+                TableUtils.createTableIfNotExists(daoOwner.getConnectionSource(), GmailLabelUpdate.class);
+                TableUtils.createTableIfNotExists(daoOwner.getConnectionSource(), GmailMessage.class);
                 Schema newSchema = new Schema(appName);
                 newSchema.setSchemaVersion(DATABASE_SCHEMA_LATEST_VERSION);
                 schemaObject = newSchema;
@@ -111,7 +110,7 @@ public class GmailController {
 
             if (schemaObject.getSchemaVersion() == 3) {
                 // Add HistoryEvent table
-                TableUtils.createTableIfNotExists(connectionSource, HistoryEvent.class);
+                TableUtils.createTableIfNotExists(daoOwner.getConnectionSource(), HistoryEvent.class);
                 schemaObject.setSchemaVersion(4L);
                 schemaDao.update(schemaObject);
             }
