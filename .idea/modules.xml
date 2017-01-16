@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/gmailApiTest.iml" filepath="$PROJECT_DIR$/gmailApiTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/gmailApiTest.iml" filepath="$PROJECT_DIR$/.idea/modules/gmailApiTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/gmailApiTest_main.iml" filepath="$PROJECT_DIR$/.idea/modules/gmailApiTest_main.iml" group="gmailApiTest" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/gmailApiTest_test.iml" filepath="$PROJECT_DIR$/.idea/modules/gmailApiTest_test.iml" group="gmailApiTest" />
     </modules>
   </component>
 </project>
