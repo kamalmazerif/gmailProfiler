@@ -7,12 +7,14 @@ import com.j256.ormlite.table.DatabaseTable;
  * Created by User on 1/3/2016.
  */
 
-@DatabaseTable(tableName = "gmailMessages")
+@DatabaseTable(tableName = Schema.TABLE_NAME_GMAIL_MESSAGES)
 public class GmailMessage {
 
     public static final String FIELD_MESSAGE_ID = "messageId";
+    public static final String FIELD_HISTORY_ID = "historyId";
     public static final String FIELD_THREAD_ID = "threadId";
     public static final String FIELD_HEADER_FROM = "headerFrom";
+    public static final String FIELD_INTERNAL_DATE = "internalDate";
 
 
     @DatabaseField(generatedId = true)
@@ -29,6 +31,12 @@ public class GmailMessage {
     @DatabaseField(columnName = FIELD_HEADER_FROM, canBeNull = true)
     private String headerFrom;
 
+    @DatabaseField(columnName = FIELD_INTERNAL_DATE, canBeNull = true)
+    private Long internalDate;
+
+    @DatabaseField(columnName = FIELD_HISTORY_ID, canBeNull = true)
+    private Long historyId;
+
 
     GmailMessage() {
         // all persisted classes must define a no-arg constructor with at least package visibility
@@ -42,19 +50,23 @@ public class GmailMessage {
     @Override
     public int hashCode() {
         return ("" + messageId
+                + "-" + historyId
                 + "-" + threadId
                 + "-" + headerFrom
+                + "-" + internalDate
         ).hashCode();
     }
 
     @Override
-    public boolean equals(Object other) {
-        if (other == null || other.getClass().equals(getClass())) {
+    public boolean equals(Object other) { // Do not compare database primary key
+        if (other == null || !other.getClass().equals(getClass())) {
             return false;
         }
         return messageId.equals(((GmailMessage) other).messageId)
+                && historyId.equals(((GmailMessage) other).historyId)
                 && threadId.equals(((GmailMessage) other).threadId)
-                && headerFrom.equals(((GmailMessage) other).headerFrom);
+                && headerFrom.equals(((GmailMessage) other).headerFrom)
+                && internalDate.equals(((GmailMessage) other).internalDate);
     }
 
     //////////////////////////////////////////////////
@@ -89,5 +101,21 @@ public class GmailMessage {
 
     public void setHeaderFrom(String headerFrom) {
         this.headerFrom = headerFrom;
+    }
+
+    public void setInternalDate(Long internalDate) {
+        this.internalDate = internalDate;
+    }
+
+    public Long getInternalDate() {
+        return internalDate;
+    }
+
+    public Long getHistoryId() {
+        return historyId;
+    }
+
+    public void setHistoryId(Long historyId) {
+        this.historyId = historyId;
     }
 }

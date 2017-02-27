@@ -6,6 +6,7 @@ import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.json.JsonFactory;
@@ -18,17 +19,17 @@ import com.google.api.services.gmail.Gmail;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.Thread;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
 /**
  * Created by User on 12/27/2015.
  */
-public class GmailQuickstart {
+public class GmailApiService {
 
     final static String projectId = "gmail-test-2015-12";
 
@@ -75,7 +76,7 @@ public class GmailQuickstart {
         public static Credential authorize() throws IOException {
             // Load client secrets.
             InputStream in =
-                    GmailQuickstart.class.getResourceAsStream("/client_secret.json");
+                    GmailApiService.class.getResourceAsStream("/client_secret.json");
             GoogleClientSecrets clientSecrets =
                     GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
 
@@ -141,8 +142,7 @@ public class GmailQuickstart {
 
     }
 
-
-    public static Message getMessageInfo(String messageId) throws IOException {
+    public static Message getMessageByIdFromApi(String messageId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
@@ -150,6 +150,12 @@ public class GmailQuickstart {
         final String snippet = message.getSnippet();
         System.out.println("Got details for messageId:" + messageId + " snippet: " + snippet);
         return message;
+    }
+
+    public static void getHistory(String historyId) throws IOException {
+        Gmail service = getGmailService();
+        ListHistoryResponse response = service.users().history().list("me").setStartHistoryId(new BigInteger(historyId)).execute();
+        System.out.println(response);
     }
 
     public static Label getLabelInfo(String labelId) throws IOException {
@@ -162,53 +168,7 @@ public class GmailQuickstart {
         return label;
     }
 
-//    public static void scanAllMessagesWithLabel(String labelId) throws IOException, InterruptedException {
-//        // Build a new authorized API client service.
-//        Gmail service = getGmailService();
-//
-//        final String userId = "me";
-//        ListMessagesResponse response = service.users().messages().list(userId)
-//                .setLabelIds(Arrays.asList(labelId)).execute();
-//
-//        List<Message> messagesOverall = new ArrayList<Message>();
-//
-//
-//
-//        HashMap<String, Message> messageMap = new HashMap<>();
-//
-//
-//
-//
-//        while (messagesOnPage != null) {
-//            List<Message> messagesOnPage = response.getMessages();
-//            for (Message nextMessage : messagesOnPage) {
-//                if (messageMap.containsKey(nextMessage.getId())) {
-//                    System.out.println("Duplicate message id: " + nextMessage.getId());
-//                } else {
-//                    messageMap.put(nextMessage.getId(), nextMessage);
-//                }
-//            }
-//
-//            messagesOverall.addAll(messagesOnPage);
-//            System.out.println("Added " + messagesOnPage.size() + " messages, " + messagesOverall.size() + " messages total, Est. results size: " + response.getResultSizeEstimate());
-//            if (response.getNextPageToken() != null) {
-//                String pageToken = response.getNextPageToken();
-//                response = service.users().messages().list(userId).setLabelIds(Arrays.asList(labelId))
-//                        .setPageToken(pageToken).execute();
-//            } else {
-//                break;
-//            }
-//        }
-//
-//        System.out.println("Message map size: " + messageMap.size());
-//
-//        for (Message message : messagesOverall) {
-//            System.out.println(message.toPrettyString());
-//            Thread.currentThread().sleep(1000);
-//        }
-//    }
-
-    public static List<Message> scanAllMessagesWithLabel(String labelId) throws IOException, InterruptedException {
+    public static List<Message> getAllMessagesForLabel(String labelId) throws IOException, InterruptedException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
@@ -216,14 +176,12 @@ public class GmailQuickstart {
         ListMessagesResponse response = service.users().messages().list(userId)
                 .setLabelIds(Arrays.asList(labelId)).execute();
 
-        List<Message> messagesOverall = new ArrayList<Message>();
+        List<Message> messagesFromAllPages = new ArrayList<Message>();
         HashMap<String, Message> messageMap = new HashMap<>();
-
-
-
 
         while (response.getMessages() != null) {
 
+            // Analyze/peek messages on this page
             for (Message nextMessage : response.getMessages()) {
                 if (nextMessage.getHistoryId() != null) {
                     System.out.println("Found history ID: " + nextMessage.getHistoryId());
@@ -234,49 +192,77 @@ public class GmailQuickstart {
                     messageMap.put(nextMessage.getId(), nextMessage);
                 }
             }
+            messagesFromAllPages.addAll(response.getMessages());
 
-            messagesOverall.addAll(response.getMessages());
-            System.out.println("Added " + response.getMessages().size() + " messages, " + messagesOverall.size() + " messages total, Est. results size: " + response.getResultSizeEstimate());
+            System.out.println("Added " + response.getMessages().size() + " messages, " + messagesFromAllPages.size() + " messages total, Est. results size: " + response.getResultSizeEstimate() + ", fetching next page");
             if (response.getNextPageToken() != null) {
                 String pageToken = response.getNextPageToken();
                 response = service.users().messages().list(userId).setLabelIds(Arrays.asList(labelId))
                         .setPageToken(pageToken).execute();
             } else {
+                // There is no next page
                 break;
             }
         }
 
-        System.out.println("Message map size: " + messageMap.size());
-
-        return messagesOverall;
+        System.out.println("Messages found: "+ messagesFromAllPages.size() +", Unique Id: " + messageMap.size());
+        return messagesFromAllPages;
     }
 
-    public static void showMessageHistory(String startHistoryId) throws IOException {
+    // Should be separated into fetching the history ID (this class)
+    // And doing something with it (controller class)
+    public static List<History> getMessageHistoryFrom(String startHistoryId) throws IOException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
 
 
         BigInteger startHistoryIdBigInteger = BigInteger.valueOf(Long.valueOf(startHistoryId));
-        ListHistoryResponse response = service.users().history().list("me")
-                .setStartHistoryId(startHistoryIdBigInteger).execute();
+        final Gmail.Users.History.List request = service.users().history().list("me")
+                .setStartHistoryId(startHistoryIdBigInteger);
 
         List<History> histories = new ArrayList<History>();
-        while (response.getHistory() != null) {
-            histories.addAll(response.getHistory());
-            if (response.getNextPageToken() != null) {
-                System.out.println("Getting next page token...");
-                String pageToken = response.getNextPageToken();
-                response = service.users().history().list("me").setPageToken(pageToken)
-                        .setStartHistoryId(startHistoryIdBigInteger).execute();
-            } else {
-                break;
+        try {
+            ListHistoryResponse response = request.execute();
+
+            while (response.getHistory() != null) {
+                histories.addAll(response.getHistory());
+                if (response.getNextPageToken() != null) {
+                    String pageToken = response.getNextPageToken();
+                    System.out.println("Getting next page, token: " + pageToken);
+                    response = service.users().history().list("me").setPageToken(pageToken)
+                            .setStartHistoryId(startHistoryIdBigInteger).execute();
+                } else {
+                    System.out.println("Response has no next page");
+                    break;
+                }
             }
+
+        } catch (GoogleJsonResponseException e) {
+            System.out.println("---");
+            System.out.println(e.getClass().getCanonicalName() + " occurred when accessing history info for history id: " + startHistoryIdBigInteger + ", details: " + e.getDetails().toString());
         }
 
-        for (History history : histories) {
-            System.out.println(" --- Next history: ");
-            System.out.println(history.toPrettyString());
+        System.out.println("Done collecting histories");
+        return histories;
+    }
+
+    public static boolean isHistoryIdValid(String historyId) throws IOException {
+        // Build a new authorized API client service.
+        Gmail service = getGmailService();
+
+        BigInteger startHistoryIdBigInteger = BigInteger.valueOf(Long.valueOf(historyId));
+        final Gmail.Users.History.List request = service.users().history().list("me")
+                .setStartHistoryId(startHistoryIdBigInteger);
+        try {
+            ListHistoryResponse response = request.execute();
+        } catch (GoogleJsonResponseException e) {
+            if (e.getDetails().getCode() == 404) {
+                return false;
+            }
+
+            throw e; // Not sure what is wrong, so rethrow
         }
+        return true;
     }
 
 

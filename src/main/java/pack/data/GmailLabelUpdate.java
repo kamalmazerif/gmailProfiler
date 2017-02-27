@@ -11,7 +11,7 @@ import com.j256.ormlite.table.DatabaseTable;
 // "messagesTotal":1976,"messagesUnread":1117,"name":"INBOX",
 // "threadsTotal":1881,"threadsUnread":1086,"type":"system"}
 @DatabaseTable(tableName = "gmailLabels")
-public class GmailLabel {
+public class GmailLabelUpdate {
 
     public static final String FIELD_LABEL_NAME = "labelName";
     public static final String FIELD_LAST_HISTORY_ID = "lastHistoryId";
@@ -48,7 +48,7 @@ public class GmailLabel {
 
 
 
-    public GmailLabel() {
+    public GmailLabelUpdate() {
         // all persisted classes must define a no-arg constructor with at least package visibility
     }
 
@@ -58,20 +58,20 @@ public class GmailLabel {
     }
 
     @Override
-    public boolean equals(Object other) {
-        if (other == null || other.getClass().equals(getClass())) {
+    public boolean equals(Object other) { // Do not compare database primary key
+        if (other == null || !other.getClass().equals(getClass())) {
             return false;
         }
 
-        GmailLabel otherGmailLabel = (GmailLabel)other;
+        GmailLabelUpdate otherGmailLabelUpdate = (GmailLabelUpdate)other;
 
-        return messagesTotal == otherGmailLabel.messagesTotal
-                && messagesUnread == otherGmailLabel.messagesUnread
-                && threadsTotal == otherGmailLabel.threadsTotal
-                && threadsUnread == otherGmailLabel.threadsUnread
-                && lastHistoryId == otherGmailLabel.lastHistoryId
-                && updateTimeMillis == otherGmailLabel.updateTimeMillis
-                && labelName.equals(otherGmailLabel.labelName);
+        return messagesTotal == otherGmailLabelUpdate.messagesTotal
+                && messagesUnread == otherGmailLabelUpdate.messagesUnread
+                && threadsTotal == otherGmailLabelUpdate.threadsTotal
+                && threadsUnread == otherGmailLabelUpdate.threadsUnread
+                && lastHistoryId == otherGmailLabelUpdate.lastHistoryId
+                && updateTimeMillis == otherGmailLabelUpdate.updateTimeMillis
+                && labelName.equals(otherGmailLabelUpdate.labelName);
     }
 
     ///////////////////
